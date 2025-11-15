@@ -83,6 +83,9 @@ Approximation guidelines:
 
 Return ONLY valid JSON, no additional text or explanation."""
 
+    content = None
+    finish_reason = None
+    
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -97,8 +100,14 @@ Return ONLY valid JSON, no additional text or explanation."""
                 }
             ],
             temperature=0.4,  # Slightly higher for creative approximations when needed
-            max_tokens=1200
+            max_tokens=2500  # Increased to prevent truncation of complete JSON responses
         )
+        
+        # Check if response was truncated
+        finish_reason = response.choices[0].finish_reason
+        if finish_reason == "length":
+            print(f"  ⚠️  WARNING: Response was truncated for {college_name} (finish_reason: {finish_reason})")
+            print(f"     Consider increasing max_tokens or reducing prompt length")
         
         content = response.choices[0].message.content.strip()
         
@@ -121,7 +130,12 @@ Return ONLY valid JSON, no additional text or explanation."""
         
     except json.JSONDecodeError as e:
         print(f"  ⚠️  JSON decode error for {college_name}: {e}")
-        print(f"  Response was: {content[:200]}")
+        if content:
+            print(f"  Response length: {len(content)} characters")
+            print(f"  Response preview (first 500 chars): {content[:500]}")
+            print(f"  Response preview (last 500 chars): {content[-500:] if len(content) > 500 else content}")
+        if finish_reason == "length":
+            print(f"  ⚠️  This error may be due to response truncation (finish_reason: {finish_reason})")
         return None
     except Exception as e:
         print(f"  ❌ Error fetching data for {college_name}: {e}")
