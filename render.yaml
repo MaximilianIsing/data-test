@@ -1,0 +1,12 @@
+services:
+  - type: worker
+    name: college-data-enrichment
+    env: python
+    pythonVersion: 3.11
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: cd data && python college_data.py
+    envVars:
+      - key: GPT_API_KEY
+        sync: false
+
