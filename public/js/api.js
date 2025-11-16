@@ -161,19 +161,30 @@ const SavedColleges = {
   
   add(college) {
     const colleges = this.get();
-    if (!colleges.find(c => c.id === college.id)) {
-      colleges.push(college);
-      Storage.set('savedColleges', colleges);
+    // Check if already saved
+    if (colleges.find(c => c.id === college.id)) {
+      return true; // Already saved, no action needed
     }
+    // Check limit of 5 colleges
+    if (colleges.length >= 5) {
+      return false; // Limit reached
+    }
+    colleges.push(college);
+    Storage.set('savedColleges', colleges);
+    return true; // Successfully added
   },
   
   remove(collegeId) {
-    const colleges = this.get().filter(c => c.id !== collegeId);
+    // Convert both to strings for consistent comparison
+    const idStr = String(collegeId);
+    const colleges = this.get().filter(c => String(c.id) !== idStr);
     Storage.set('savedColleges', colleges);
   },
   
   isSaved(collegeId) {
-    return this.get().some(c => c.id === collegeId);
+    // Convert both to strings for consistent comparison
+    const idStr = String(collegeId);
+    return this.get().some(c => String(c.id) === idStr);
   }
 };
 

@@ -32,7 +32,7 @@
       <li><a href="/index.html"><img src="/media/icons/Home256x256.png" alt="Home" class="nav-icon"> Home</a></li>
       <li><a href="/profile.html"><img src="/media/icons/Profile256x256.png" alt="Profile" class="nav-icon"> My Profile</a></li>
       <li><a href="/odds.html"><img src="/media/icons/Odds256x256.png" alt="Admissions Odds" class="nav-icon"> Admissions Odds</a></li>
-      <li><a href="/simulator.html"><img src="/media/icons/Book256x256.png" alt="What If" class="nav-icon"> "What If" Simulator</a></li>
+      <li><a href="/simulator.html"><img src="/media/icons/WhatIf256x256.png" alt="What If" class="nav-icon"> "What If" Simulator</a></li>
       <li><a href="/explorer.html"><img src="/media/icons/Search256x256.png" alt="College Explorer" class="nav-icon"> College Explorer</a></li>
       <li><a href="/career.html"><img src="/media/icons/DollarSign256x256.png" alt="Career & Salary Paths" class="nav-icon"> Career & Salary Paths</a></li>
       <li><a href="/activities.html"><img src="/media/icons/Activity256x256.png" alt="Activities" class="nav-icon"> Activity & Internship Recs</a></li>
@@ -44,12 +44,7 @@
 
   <main>
     <div class="container">
-      <h2 style="color: var(--primary-green); margin: 1rem 0;">AI Chat Advisor</h2>
-
-      <div class="card">
-        <h3>24/7 Personal Counselor</h3>
-        <p>Ask any question — from admissions strategy to course advice — and get instant AI guidance.</p>
-      </div>
+      <h2 style="color: var(--primary-green); margin: 1rem 0;">AI College Counselor</h2>
 
       <!-- Chat Interface -->
       <div class="chat-container">
@@ -84,10 +79,10 @@
             <img src="/media/icons/Chart256x256.png" alt="Chart" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 0.5rem;"> Improve Admission Odds
           </button>
           <button class="btn btn-secondary" onclick="askQuickQuestion('What activities should I focus on?')">
-            🏃 Activity Suggestions
+            <img src="/media/icons/Activity256x256.png" alt="Activity" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 0.5rem;"> Activity Suggestions
           </button>
           <button class="btn btn-secondary" onclick="askQuickQuestion('How should I prepare for college applications?')">
-            📝 Application Prep
+            <img src="/media/icons/Check256x256.png" alt="Check" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 0.5rem;"> Application Prep
           </button>
         </div>
       </div>
@@ -96,7 +91,7 @@
 
   <footer>
     <div class="container">
-      <p>&copy; 2025 Path Pal. v1.06</p>
+      <p>&copy; 2025 Path Pal. v1.07</p>
     </div>
   </footer>
 
@@ -110,8 +105,23 @@
       chatHistory = Storage.get('chatHistory', []);
       loadChatHistory();
       
-      // Focus input
-      document.getElementById('message-input').focus();
+      // Check for question parameter in URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const question = urlParams.get('question');
+      if (question) {
+        // Decode and set the question in the input
+        const decodedQuestion = decodeURIComponent(question);
+        const input = document.getElementById('message-input');
+        input.value = decodedQuestion;
+        
+        // Auto-submit after a short delay to ensure page is loaded
+        setTimeout(() => {
+          document.getElementById('chat-form').dispatchEvent(new Event('submit'));
+        }, 500);
+      } else {
+        // Focus input if no question
+        document.getElementById('message-input').focus();
+      }
     });
 
     function loadChatHistory() {
@@ -143,8 +153,8 @@
       // Add user message
       addMessageToChat(message, 'user', true);
       
-      // Show loading
-      const loadingId = addMessageToChat('Thinking...', 'ai', true);
+      // Show loading with animated ellipsis
+      const loadingId = addLoadingMessage();
       
       try {
         // Get user profile for context
@@ -185,6 +195,34 @@
       }
     }
 
+    function addLoadingMessage() {
+      const container = document.getElementById('chat-messages');
+      const messageDiv = document.createElement('div');
+      const messageId = 'msg-' + Date.now() + '-' + Math.random();
+      messageDiv.id = messageId;
+      messageDiv.className = 'message ai';
+      
+      const textSpan = document.createElement('span');
+      textSpan.id = messageId + '-text';
+      messageDiv.innerHTML = '<strong>Path Pal AI Advisor:</strong> ';
+      messageDiv.appendChild(textSpan);
+      
+      container.appendChild(messageDiv);
+      container.scrollTop = container.scrollHeight;
+      
+      // Animate ellipsis
+      let dots = 0;
+      const loadingInterval = setInterval(() => {
+        dots = (dots % 3) + 1;
+        textSpan.textContent = 'Thinking' + '.'.repeat(dots);
+      }, 500);
+      
+      // Store interval ID so we can clear it later
+      messageDiv.dataset.intervalId = loadingInterval;
+      
+      return messageId;
+    }
+
     function addMessageToChat(text, sender, scroll = false) {
       const container = document.getElementById('chat-messages');
       const messageDiv = document.createElement('div');
@@ -210,6 +248,10 @@
     function removeMessage(messageId) {
       const message = document.getElementById(messageId);
       if (message) {
+        // Clear any animation interval if it exists
+        if (message.dataset.intervalId) {
+          clearInterval(parseInt(message.dataset.intervalId));
+        }
         message.remove();
       }
     }

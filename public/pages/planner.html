@@ -32,7 +32,7 @@
       <li><a href="/index.html"><img src="/media/icons/Home256x256.png" alt="Home" class="nav-icon"> Home</a></li>
       <li><a href="/profile.html"><img src="/media/icons/Profile256x256.png" alt="Profile" class="nav-icon"> My Profile</a></li>
       <li><a href="/odds.html"><img src="/media/icons/Odds256x256.png" alt="Admissions Odds" class="nav-icon"> Admissions Odds</a></li>
-      <li><a href="/simulator.html"><img src="/media/icons/Book256x256.png" alt="What If" class="nav-icon"> "What If" Simulator</a></li>
+      <li><a href="/simulator.html"><img src="/media/icons/WhatIf256x256.png" alt="What If" class="nav-icon"> "What If" Simulator</a></li>
       <li><a href="/explorer.html"><img src="/media/icons/Search256x256.png" alt="College Explorer" class="nav-icon"> College Explorer</a></li>
       <li><a href="/career.html"><img src="/media/icons/DollarSign256x256.png" alt="Career & Salary Paths" class="nav-icon"> Career & Salary Paths</a></li>
       <li><a href="/activities.html"><img src="/media/icons/Activity256x256.png" alt="Activities" class="nav-icon"> Activity & Internship Recs</a></li>
@@ -88,7 +88,7 @@
 
   <footer>
     <div class="container">
-      <p>&copy; 2025 Path Pal. v1.06</p>
+      <p>&copy; 2025 Path Pal. v1.07</p>
     </div>
   </footer>
 
@@ -98,11 +98,58 @@
     let currentYear = 1;
     let plannerData = {};
 
-    document.addEventListener('DOMContentLoaded', () => {
-      loadPlanner();
+    // Calculate profile completion (same logic as index.html)
+    async function calculateProfileCompletion() {
+      const profile = await UserProfile.get();
+      const testType = profile.testType || localStorage.getItem('test-type') || '';
+      
+      let completion = 0;
+      if (profile.name) completion += 15;
+      if (profile.grade) completion += 15;
+      if (profile.gpa) completion += 15;
+      // SAT/ACT counts if scores exist OR if "Untaken" is selected (testType === 'UNTAKEN')
+      if (profile.sat || profile.act || testType === 'UNTAKEN') completion += 15;
+      if (profile.majors && profile.majors.length > 0) completion += 20;
+      // AP courses and activities always count as complete (even if 0), so not included in calculation
+      if (profile.careerGoals) completion += 20;
+      
+      if (completion > 100) completion = 100;
+      return completion;
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      const completion = await calculateProfileCompletion();
+      if (completion < 100) {
+        const content = document.getElementById('year-content');
+        content.innerHTML = `
+          <div style="text-align: center; padding: 2rem;">
+            <h4 style="color: var(--primary-green); margin-bottom: 1rem;">Profile Incomplete</h4>
+            <p style="color: var(--text-light); margin-bottom: 1rem;">
+              Your profile must be 100% complete to generate a personalized 4-year plan.
+            </p>
+            <p style="color: var(--text-light); margin-bottom: 1.5rem;">
+              Current completion: <strong style="color: var(--primary-green);">${completion}%</strong>
+            </p>
+            <button class="btn btn-primary" onclick="window.location.href='/profile.html'">
+              Complete Your Profile
+            </button>
+          </div>
+        `;
+        document.getElementById('milestones-card').style.display = 'none';
+        document.getElementById('timeline-card').style.display = 'none';
+      } else {
+        loadPlanner();
+      }
     });
 
-    function showYear(year) {
+    async function showYear(year) {
+      // Check if profile is complete
+      const completion = await calculateProfileCompletion();
+      if (completion < 100) {
+        showNotification('Your profile must be 100% complete to view the 4-year plan. Please complete your profile first.', 'error');
+        return;
+      }
+      
       currentYear = year;
       
       // Update active button
@@ -113,15 +160,15 @@
         }
       });
       
-      displayYear(year);
+      await displayYear(year);
     }
 
-    function displayYear(year) {
+    async function displayYear(year) {
       const content = document.getElementById('year-content');
       const title = document.getElementById('year-title');
       title.textContent = `Year ${year} Roadmap`;
 
-      const yearData = plannerData[`year${year}`] || generateDefaultYear(year);
+      const yearData = plannerData[`year${year}`] || await generateDefaultYear(year);
 
       content.innerHTML = `
         <div style="margin-bottom: 1.5rem;">
@@ -163,6 +210,8 @@
       const profile = await UserProfile.get();
       const majors = profile.majors || ['General Studies'];
       const major = majors[0];
+      const grade = profile.grade || '';
+      const isHighSchool = grade.includes('9th') || grade.includes('10th') || grade.includes('11th') || grade.includes('12th');
 
       const yearData = {
         courses: [],
@@ -170,71 +219,204 @@
         dates: []
       };
 
-      if (year === 1) {
-        yearData.courses = [
-          { name: 'Introduction to ' + major, description: 'Foundational course in your major' },
-          { name: 'English Composition', description: 'Develop writing skills' },
-          { name: 'Mathematics', description: 'Build quantitative skills' },
-          { name: 'General Education Elective', description: 'Explore interests' }
-        ];
-        yearData.activities = [
-          { name: 'Join relevant clubs', description: 'Get involved in campus/community activities' },
-          { name: 'Build study habits', description: 'Establish strong academic foundation' }
-        ];
-        yearData.dates = [
-          { name: 'Semester Start', date: 'Fall' },
-          { name: 'Midterm Exams', date: 'Mid-October' },
-          { name: 'Final Exams', date: 'December' }
-        ];
-      } else if (year === 2) {
-        yearData.courses = [
-          { name: 'Intermediate ' + major, description: 'Advanced topics in your major' },
-          { name: 'Research Methods', description: 'Learn research skills' },
-          { name: 'Statistics', description: 'Data analysis skills' },
-          { name: 'General Education', description: 'Complete GE requirements' }
-        ];
-        yearData.activities = [
-          { name: 'Apply for internships', description: 'Gain work experience' },
-          { name: 'Leadership roles', description: 'Take on leadership positions' }
-        ];
-        yearData.dates = [
-          { name: 'Internship Applications', date: 'Spring' },
-          { name: 'Summer Planning', date: 'May' }
-        ];
-      } else if (year === 3) {
-        yearData.courses = [
-          { name: 'Advanced ' + major, description: 'Specialized coursework' },
-          { name: 'Capstone Project', description: 'Major project or research' },
-          { name: 'Electives', description: 'Specialized electives' }
-        ];
-        yearData.activities = [
-          { name: 'Summer Internship', description: 'Gain professional experience' },
-          { name: 'Research Project', description: 'Independent research' }
-        ];
-        yearData.dates = [
-          { name: 'College Applications Begin', date: 'Fall' },
-          { name: 'Test Prep (if needed)', date: 'Summer-Fall' }
-        ];
-      } else if (year === 4) {
-        yearData.courses = [
-          { name: 'Senior Seminar', description: 'Capstone course' },
-          { name: 'Thesis/Project', description: 'Final major project' },
-          { name: 'Electives', description: 'Complete requirements' }
-        ];
-        yearData.activities = [
-          { name: 'Job/Post-Grad Applications', description: 'Apply for jobs or graduate programs' },
-          { name: 'Network building', description: 'Connect with professionals' }
-        ];
-        yearData.dates = [
-          { name: 'Graduation', date: 'Spring' },
-          { name: 'Job Interviews', date: 'Spring' }
-        ];
+      if (isHighSchool) {
+        // High school planner
+        if (year === 1) {
+          yearData.courses = [
+            { name: 'English 9', description: 'Develop reading and writing skills' },
+            { name: 'Algebra I or Geometry', description: 'Build mathematical foundation' },
+            { name: 'Biology', description: 'Introduction to life sciences' },
+            { name: 'World History', description: 'Social studies requirement' },
+            { name: 'Foreign Language I', description: 'Begin language study' },
+            { name: 'Elective', description: 'Explore interests (Art, Music, PE, etc.)' }
+          ];
+          yearData.activities = [
+            { name: 'Join 2-3 clubs', description: 'Explore interests and build involvement' },
+            { name: 'Start community service', description: 'Begin building service hours' },
+            { name: 'Maintain strong GPA', description: 'Focus on academic excellence' }
+          ];
+          yearData.dates = [
+            { name: 'School Year Begins', date: 'August/September' },
+            { name: 'First Quarter Grades', date: 'October' },
+            { name: 'Midterm Exams', date: 'January' },
+            { name: 'Final Exams', date: 'May/June' }
+          ];
+        } else if (year === 2) {
+          yearData.courses = [
+            { name: 'English 10', description: 'Advanced composition and literature' },
+            { name: 'Geometry or Algebra II', description: 'Continue math progression' },
+            { name: 'Chemistry', description: 'Physical sciences' },
+            { name: 'US History', description: 'American history requirement' },
+            { name: 'Foreign Language II', description: 'Continue language study' },
+            { name: 'Elective', description: 'Continue exploring interests' }
+          ];
+          yearData.activities = [
+            { name: 'Take on leadership role', description: 'Become officer or leader in club' },
+            { name: 'Summer program/volunteer', description: 'Plan meaningful summer activity' },
+            { name: 'Explore career interests', description: 'Research potential majors/careers' }
+          ];
+          yearData.dates = [
+            { name: 'PSAT (Optional)', date: 'October' },
+            { name: 'AP Exam Registration', date: 'March' },
+            { name: 'Summer Planning', date: 'May' }
+          ];
+        } else if (year === 3) {
+          yearData.courses = [
+            { name: 'English 11 / AP English', description: 'Advanced English or AP course' },
+            { name: 'Algebra II or Pre-Calculus', description: 'Advanced mathematics' },
+            { name: 'Physics or AP Science', description: 'Advanced science course' },
+            { name: 'AP ' + major + ' (if available)', description: 'Advanced course in your interest area' },
+            { name: 'Foreign Language III (if continuing)', description: 'Advanced language' },
+            { name: 'Elective', description: 'Continue specialization' }
+          ];
+          yearData.activities = [
+            { name: 'Take SAT/ACT', description: 'Register and prepare for standardized tests' },
+            { name: 'College visits', description: 'Visit campuses of interest' },
+            { name: 'Summer internship/research', description: 'Gain experience in field of interest' },
+            { name: 'Build strong activity profile', description: 'Deepen involvement in key activities' }
+          ];
+          yearData.dates = [
+            { name: 'SAT/ACT Registration', date: 'Fall' },
+            { name: 'SAT/ACT Test Date', date: 'Spring' },
+            { name: 'College Research Begins', date: 'Spring' },
+            { name: 'AP Exams', date: 'May' },
+            { name: 'Summer Program Applications', date: 'January-March' }
+          ];
+        } else if (year === 4) {
+          yearData.courses = [
+            { name: 'English 12 / AP English', description: 'Senior English or AP Literature' },
+            { name: 'Calculus or Statistics', description: 'Advanced math' },
+            { name: 'AP ' + major + ' (if available)', description: 'Advanced coursework' },
+            { name: 'Electives', description: 'Complete remaining requirements' }
+          ];
+          yearData.activities = [
+            { name: 'College applications', description: 'Complete all application materials' },
+            { name: 'Scholarship applications', description: 'Apply for financial aid' },
+            { name: 'Maintain activities', description: 'Continue leadership and involvement' }
+          ];
+          yearData.dates = [
+            { name: 'Early Decision/Early Action Deadline', date: 'November 1' },
+            { name: 'Regular Decision Deadlines', date: 'January 1-15' },
+            { name: 'FAFSA Submission', date: 'October 1' },
+            { name: 'Decision Notifications', date: 'March-April' },
+            { name: 'Commitment Deadline', date: 'May 1' },
+            { name: 'Graduation', date: 'May/June' }
+          ];
+        }
+      } else {
+        // College planner
+        if (year === 1) {
+          yearData.courses = [
+            { name: 'Introduction to ' + major, description: 'Foundational course in your major' },
+            { name: 'English Composition', description: 'Develop writing and communication skills' },
+            { name: 'Calculus I or Statistics', description: 'Build quantitative skills' },
+            { name: 'General Education Course', description: 'Complete GE requirements' },
+            { name: 'General Education Course', description: 'Explore diverse subjects' },
+            { name: 'Elective', description: 'Explore interests outside major' }
+          ];
+          yearData.activities = [
+            { name: 'Join major-related clubs', description: 'Connect with peers in your field' },
+            { name: 'Attend career fairs', description: 'Explore career options early' },
+            { name: 'Build study habits', description: 'Establish strong academic foundation' },
+            { name: 'Find study group', description: 'Build academic support network' }
+          ];
+          yearData.dates = [
+            { name: 'Fall Semester Begins', date: 'August/September' },
+            { name: 'Add/Drop Deadline', date: 'First 2 weeks' },
+            { name: 'Midterm Exams', date: 'October' },
+            { name: 'Final Exams', date: 'December' },
+            { name: 'Spring Registration', date: 'November' }
+          ];
+        } else if (year === 2) {
+          yearData.courses = [
+            { name: 'Intermediate ' + major, description: 'Advanced topics in your major' },
+            { name: 'Research Methods', description: 'Learn research and analysis skills' },
+            { name: 'Statistics or Data Analysis', description: 'Quantitative analysis skills' },
+            { name: 'General Education', description: 'Continue GE requirements' },
+            { name: 'Major Elective', description: 'Begin specialization' },
+            { name: 'General Education', description: 'Complete remaining GE' }
+          ];
+          yearData.activities = [
+            { name: 'Apply for summer internships', description: 'Gain professional experience' },
+            { name: 'Take on leadership role', description: 'Become officer in club or organization' },
+            { name: 'Attend networking events', description: 'Build professional connections' },
+            { name: 'Research opportunities', description: 'Explore research with professors' }
+          ];
+          yearData.dates = [
+            { name: 'Internship Applications Open', date: 'January-March' },
+            { name: 'Summer Program Deadlines', date: 'February-April' },
+            { name: 'Midterm Exams', date: 'March' },
+            { name: 'Final Exams', date: 'May' }
+          ];
+        } else if (year === 3) {
+          yearData.courses = [
+            { name: 'Advanced ' + major, description: 'Specialized upper-division coursework' },
+            { name: 'Capstone Preparation', description: 'Begin planning major project' },
+            { name: 'Major Electives', description: 'Deepen specialization' },
+            { name: 'Minor/Concentration Courses', description: 'Complete additional focus area' }
+          ];
+          yearData.activities = [
+            { name: 'Summer internship/research', description: 'Gain significant professional experience' },
+            { name: 'Independent research project', description: 'Work with faculty mentor' },
+            { name: 'Present at conferences', description: 'Share research or projects' },
+            { name: 'Build professional portfolio', description: 'Document your work and achievements' }
+          ];
+          yearData.dates = [
+            { name: 'Graduate School Research (if applicable)', date: 'Fall' },
+            { name: 'GRE/MCAT/LSAT Prep (if needed)', date: 'Summer-Fall' },
+            { name: 'Internship Applications', date: 'Fall-Spring' },
+            { name: 'Midterm Exams', date: 'March' },
+            { name: 'Final Exams', date: 'May' }
+          ];
+        } else if (year === 4) {
+          yearData.courses = [
+            { name: 'Senior Seminar/Capstone', description: 'Final capstone course' },
+            { name: 'Thesis/Research Project', description: 'Complete major project' },
+            { name: 'Advanced Electives', description: 'Final specialization courses' },
+            { name: 'Complete remaining requirements', description: 'Finish all degree requirements' }
+          ];
+          yearData.activities = [
+            { name: 'Job/Post-Grad Applications', description: 'Apply for jobs or graduate programs' },
+            { name: 'Network building', description: 'Connect with alumni and professionals' },
+            { name: 'Attend career fairs', description: 'Meet employers and recruiters' },
+            { name: 'Complete portfolio', description: 'Finalize professional materials' }
+          ];
+          yearData.dates = [
+            { name: 'Graduate School Applications', date: 'Fall-Winter' },
+            { name: 'Job Application Season', date: 'Fall-Spring' },
+            { name: 'Thesis Defense/Project Presentation', date: 'Spring' },
+            { name: 'Final Exams', date: 'May' },
+            { name: 'Graduation', date: 'May/June' }
+          ];
+        }
       }
 
       return yearData;
     }
 
     async function generatePlanner() {
+      // Check if profile is complete
+      const completion = await calculateProfileCompletion();
+      if (completion < 100) {
+        showNotification('Your profile must be 100% complete to generate a personalized 4-year plan. Please complete your profile first.', 'error');
+        const content = document.getElementById('year-content');
+        content.innerHTML = `
+          <div style="text-align: center; padding: 2rem;">
+            <h4 style="color: var(--primary-green); margin-bottom: 1rem;">Profile Incomplete</h4>
+            <p style="color: var(--text-light); margin-bottom: 1rem;">
+              Your profile must be 100% complete to generate a personalized 4-year plan.
+            </p>
+            <p style="color: var(--text-light); margin-bottom: 1.5rem;">
+              Current completion: <strong style="color: var(--primary-green);">${completion}%</strong>
+            </p>
+            <button class="btn btn-primary" onclick="window.location.href='/profile.html'">
+              Complete Your Profile
+            </button>
+          </div>
+        `;
+        return;
+      }
+
       const content = document.getElementById('year-content');
       content.innerHTML = '<p class="loading">Generating personalized 4-year plan...</p>';
 
@@ -247,76 +429,121 @@
         // Parse AI response and extract planner data
         // For now, use default structure with AI enhancements
         for (let year = 1; year <= 4; year++) {
-          plannerData[`year${year}`] = generateDefaultYear(year);
+          plannerData[`year${year}`] = await generateDefaultYear(year);
         }
 
         // Save planner
         Storage.set('plannerData', plannerData);
         
         showNotification('Planner generated successfully!', 'success');
-        displayYear(currentYear);
-        loadMilestones();
-        loadTimeline();
+        await displayYear(currentYear);
+        await loadMilestones();
+        await loadTimeline();
       } catch (error) {
         // Fallback to default planner
         for (let year = 1; year <= 4; year++) {
-          plannerData[`year${year}`] = generateDefaultYear(year);
+          plannerData[`year${year}`] = await generateDefaultYear(year);
         }
         Storage.set('plannerData', plannerData);
-        displayYear(currentYear);
+        await displayYear(currentYear);
+        await loadMilestones();
+        await loadTimeline();
         showNotification('Planner updated with default structure.', 'info');
       }
     }
 
-    function loadPlanner() {
+    async function loadPlanner() {
       const saved = Storage.get('plannerData', null);
       if (saved) {
         plannerData = saved;
       } else {
         // Generate default planner
         for (let year = 1; year <= 4; year++) {
-          plannerData[`year${year}`] = generateDefaultYear(year);
+          plannerData[`year${year}`] = await generateDefaultYear(year);
         }
+        Storage.set('plannerData', plannerData);
       }
       
       displayYear(currentYear);
-      loadMilestones();
-      loadTimeline();
+      await loadMilestones();
+      await loadTimeline();
     }
 
-    function loadMilestones() {
+    async function loadMilestones() {
       const container = document.getElementById('milestones-content');
       const card = document.getElementById('milestones-card');
+      const profile = await UserProfile.get();
+      const grade = profile.grade || '';
+      const isHighSchool = grade.includes('9th') || grade.includes('10th') || grade.includes('11th') || grade.includes('12th');
       
-      const milestones = [
-        { year: 1, name: 'Maintain Strong GPA', completed: false },
-        { year: 2, name: 'Complete Core Requirements', completed: false },
-        { year: 3, name: 'Secure Internship', completed: false },
-        { year: 4, name: 'Graduate & Career Ready', completed: false }
+      const savedMilestones = Storage.get('milestones', {});
+      
+      const milestones = isHighSchool ? [
+        { year: 1, name: 'Maintain 3.5+ GPA', completed: savedMilestones['1'] || false },
+        { year: 2, name: 'Complete Core Courses', completed: savedMilestones['2'] || false },
+        { year: 2, name: 'Take PSAT', completed: savedMilestones['2-psat'] || false },
+        { year: 3, name: 'Take SAT/ACT', completed: savedMilestones['3-test'] || false },
+        { year: 3, name: 'Visit 3+ Colleges', completed: savedMilestones['3-visits'] || false },
+        { year: 4, name: 'Submit College Applications', completed: savedMilestones['4-apps'] || false },
+        { year: 4, name: 'Complete FAFSA', completed: savedMilestones['4-fafsa'] || false },
+        { year: 4, name: 'Choose College', completed: savedMilestones['4-choose'] || false }
+      ] : [
+        { year: 1, name: 'Maintain Strong GPA (3.0+)', completed: savedMilestones['1'] || false },
+        { year: 1, name: 'Join Major-Related Club', completed: savedMilestones['1-club'] || false },
+        { year: 2, name: 'Complete Core Requirements', completed: savedMilestones['2'] || false },
+        { year: 2, name: 'Secure Summer Internship', completed: savedMilestones['2-intern'] || false },
+        { year: 3, name: 'Take Leadership Role', completed: savedMilestones['3-lead'] || false },
+        { year: 3, name: 'Complete Research/Project', completed: savedMilestones['3-research'] || false },
+        { year: 4, name: 'Complete Capstone/Thesis', completed: savedMilestones['4-capstone'] || false },
+        { year: 4, name: 'Secure Post-Grad Plan', completed: savedMilestones['4-postgrad'] || false }
       ];
 
-      container.innerHTML = milestones.map(m => `
+      container.innerHTML = milestones.map(m => {
+        const milestoneId = typeof m.year === 'string' ? m.year : `${m.year}-${m.name.toLowerCase().replace(/\s+/g, '-').substring(0, 20)}`;
+        return `
         <div style="padding: 1rem; background: var(--light-mint); border-radius: 8px; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid var(--primary-green);">
           <div>
             <strong style="color: var(--primary-green);">Year ${m.year}:</strong> ${m.name}
           </div>
-          <input type="checkbox" ${m.completed ? 'checked' : ''} onchange="updateMilestone(${m.year}, this.checked)">
+          <input type="checkbox" ${m.completed ? 'checked' : ''} onchange="updateMilestone('${milestoneId}', this.checked)">
         </div>
-      `).join('');
+      `;
+      }).join('');
 
       card.style.display = 'block';
     }
 
-    function loadTimeline() {
+    async function loadTimeline() {
       const container = document.getElementById('timeline-content');
       const card = document.getElementById('timeline-card');
+      const profile = await UserProfile.get();
+      const grade = profile.grade || '';
+      const isHighSchool = grade.includes('9th') || grade.includes('10th') || grade.includes('11th') || grade.includes('12th');
       
-      const timeline = [
-        { date: 'Fall Year 1', event: 'Start strong, build foundation' },
-        { date: 'Spring Year 2', event: 'Explore interests, build connections' },
-        { date: 'Summer Year 2', event: 'First internship/research' },
-        { date: 'Fall Year 3', event: 'Specialize, take leadership roles' },
-        { date: 'Spring Year 4', event: 'Complete requirements, prepare for post-grad' }
+      const timeline = isHighSchool ? [
+        { date: 'Fall Year 1 (9th Grade)', event: 'Start strong academically, join clubs, begin building GPA foundation' },
+        { date: 'Spring Year 1', event: 'Maintain grades, explore interests, start community service' },
+        { date: 'Summer Year 1', event: 'Volunteer, summer program, or job shadowing' },
+        { date: 'Fall Year 2 (10th Grade)', event: 'Take on leadership roles, continue strong academics' },
+        { date: 'Spring Year 2', event: 'Take PSAT (optional), plan meaningful summer' },
+        { date: 'Summer Year 2', event: 'Summer program, internship, or research opportunity' },
+        { date: 'Fall Year 3 (11th Grade)', event: 'Take SAT/ACT, begin college research, visit campuses' },
+        { date: 'Spring Year 3', event: 'Take AP exams, continue college visits, plan senior year' },
+        { date: 'Summer Year 3', event: 'Final test prep if needed, complete college list, start essays' },
+        { date: 'Fall Year 4 (12th Grade)', event: 'Submit early applications, complete FAFSA, request recommendations' },
+        { date: 'Spring Year 4', event: 'Receive decisions, compare offers, commit to college, celebrate!' }
+      ] : [
+        { date: 'Fall Year 1', event: 'Start strong academically, join clubs, build study habits' },
+        { date: 'Spring Year 1', event: 'Explore major, attend career fairs, maintain GPA' },
+        { date: 'Summer Year 1', event: 'Volunteer, work, or take summer courses' },
+        { date: 'Fall Year 2', event: 'Begin specialization, apply for summer internships' },
+        { date: 'Spring Year 2', event: 'Take on leadership, secure summer opportunity' },
+        { date: 'Summer Year 2', event: 'Complete internship or research experience' },
+        { date: 'Fall Year 3', event: 'Advanced coursework, research projects, graduate school prep (if applicable)' },
+        { date: 'Spring Year 3', event: 'Capstone preparation, present research, network professionally' },
+        { date: 'Summer Year 3', event: 'Final internship, graduate school applications (if applicable)' },
+        { date: 'Fall Year 4', event: 'Complete capstone/thesis, apply for jobs or grad programs' },
+        { date: 'Spring Year 4', event: 'Finalize post-grad plans, complete degree, graduate!' }
       ];
 
       container.innerHTML = timeline.map((item, idx) => `
@@ -330,10 +557,10 @@
       card.style.display = 'block';
     }
 
-    function updateMilestone(year, completed) {
+    function updateMilestone(milestoneId, completed) {
       // Save milestone status
       const milestones = Storage.get('milestones', {});
-      milestones[year] = completed;
+      milestones[milestoneId] = completed;
       Storage.set('milestones', milestones);
     }
   </script>

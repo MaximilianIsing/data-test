@@ -2,7 +2,7 @@ const express = require('express');
 const path = require('path');
 const cors = require('cors');
 const fs = require('fs');
-const { rateStudent } = require('./rate-student');
+const { rateStudent, getAdmissionOdds } = require('./rate-system');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -97,7 +97,7 @@ app.get('/', (req, res) => {
 });
 
 // CSV file path
-const CSV_PATH = path.join(__dirname, 'data', 'us_universities_enriched.csv');
+const CSV_PATH = path.join(__dirname, 'data', 'university_data.csv');
 
 // Cache for CSV data
 let collegeDataCache = null;
@@ -105,41 +105,61 @@ let collegeDataCacheTime = null;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 // Simple CSV parser
+function parseCSVLine(line) {
+  const values = [];
+  let current = '';
+  let inQuotes = false;
+  
+  for (let j = 0; j < line.length; j++) {
+    const char = line[j];
+    
+    if (char === '"') {
+      // Handle escaped quotes ("")
+      if (j + 1 < line.length && line[j + 1] === '"' && inQuotes) {
+        current += '"';
+        j++; // Skip next quote
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      // Remove surrounding quotes from value
+      let value = current.trim();
+      if (value.startsWith('"') && value.endsWith('"')) {
+        value = value.slice(1, -1).replace(/""/g, '"');
+      }
+      values.push(value);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  
+  // Last value
+  let value = current.trim();
+  if (value.startsWith('"') && value.endsWith('"')) {
+    value = value.slice(1, -1).replace(/""/g, '"');
+  }
+  values.push(value);
+  
+  return values;
+}
+
+// Simple CSV parser
 function parseCSV(csvText) {
   const lines = csvText.split('\n').filter(line => line.trim());
   if (lines.length === 0) return [];
   
-  const headers = lines[0].split(',').map(h => h.trim());
+  // Parse header line
+  const headers = parseCSVLine(lines[0]);
   const results = [];
   
   for (let i = 1; i < lines.length; i++) {
-    const values = [];
-    let current = '';
-    let inQuotes = false;
-    
-    for (let j = 0; j < lines[i].length; j++) {
-      const char = lines[i][j];
-      
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === ',' && !inQuotes) {
-        values.push(current.trim());
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-    values.push(current.trim()); // Last value
+    const values = parseCSVLine(lines[i]);
     
     if (values.length >= headers.length) {
       const row = {};
       headers.forEach((header, index) => {
-        let value = values[index] || '';
-        // Remove quotes if present
-        if (value.startsWith('"') && value.endsWith('"')) {
-          value = value.slice(1, -1);
-        }
-        row[header] = value;
+        row[header] = values[index] || '';
       });
       results.push(row);
     }
@@ -209,13 +229,26 @@ function transformCollege(row, index) {
     actMidpoint: parseNum(row.act_50th_percentile),
     tuitionInState: parseNum(row.tuition_in_state),
     tuitionOutState: parseNum(row.tuition_out_state),
+    roomBoard: parseNum(row.room_board),
     graduationRate: parseNum(row.graduation_rate),
+    retentionRate: parseNum(row.retention_rate),
     enrollment: parseNum(row.enrollment),
+    studentFacultyRatio: parseNum(row.student_faculty_ratio),
     region: row.region || '',
     popularMajors: row.popular_majors || '',
     medianEarnings: parseNum(row.median_earnings_10_years),
     campusSetting: row.campus_setting || '',
-    url: row.url || ''
+    testOptional: row.test_optional === 'True' || row.test_optional === 'true',
+    applicationDeadline: row.application_deadline_fall || '',
+    applicationFee: parseNum(row.application_fee),
+    averageFinancialAid: parseNum(row.average_financial_aid),
+    percentReceivingAid: parseNum(row.percent_receiving_aid),
+    transferAcceptanceRate: parseNum(row.transfer_acceptance_rate),
+    latitude: parseNum(row.latitude),
+    longitude: parseNum(row.longitude),
+    housingAvailable: row.housing_available === 'True' || row.housing_available === 'true',
+    url: row.url || '',
+    rating: parseNum(row.rating) || null
   };
 }
 
@@ -366,7 +399,40 @@ function readAccounts() {
           account.interests = [];
         }
         
-        // rating is stored as plain scalar; no special parsing needed
+        try {
+          // Skip invalid "[object Object]" strings
+          if (account.activities && account.activities.trim() === '[object Object]') {
+            account.activities = [];
+          }
+          // Try to parse as JSON array first
+          else if (account.activities && account.activities.trim().startsWith('[')) {
+            account.activities = JSON.parse(account.activities);
+          } else if (account.activities && account.activities.trim()) {
+            // Legacy string format - convert to array format for consistency
+            // Parse "X hrs — description" format
+            const lines = account.activities.split('\n').map(l => l.trim()).filter(Boolean);
+            account.activities = lines.map(line => {
+              const match = line.match(/^(\d+)\s*(hrs?|hours?|h)?\s*[-–:]\s*(.+)$/i);
+              if (match) {
+                return { hours: match[1], description: match[3] };
+              }
+              return { hours: '', description: line };
+            });
+          } else {
+            account.activities = [];
+          }
+        } catch (e) {
+          // If parsing fails completely, default to empty array
+          account.activities = [];
+        }
+        
+        // Parse rating as number if it exists
+        if (account.rating && account.rating !== '') {
+          const ratingNum = parseFloat(account.rating);
+          account.rating = !isNaN(ratingNum) ? ratingNum : null;
+        } else {
+          account.rating = null;
+        }
         
         accounts.push(account);
       }
@@ -388,11 +454,30 @@ function writeAccounts(accounts) {
     
     accounts.forEach(account => {
       const row = headers.map(header => {
-        let value = account[header] || '';
+        let value = account[header];
         
         // Handle arrays and objects
-        if (header === 'majors' || header === 'interests' || header === 'ap_courses') {
-          value = Array.isArray(value) ? JSON.stringify(value) : (value || '[]');
+        if (header === 'majors' || header === 'interests' || header === 'ap_courses' || header === 'activities') {
+          if (Array.isArray(value)) {
+            value = JSON.stringify(value);
+          } else if (value && typeof value === 'object') {
+            // If it's an object but not an array, try to stringify it
+            value = JSON.stringify(value);
+          } else if (typeof value === 'string' && value.trim()) {
+            // If it's already a string (from CSV), use it as-is (should be valid JSON)
+            value = value;
+          } else {
+            // Default to empty array
+            value = '[]';
+          }
+        } else {
+          // For non-array fields, use empty string if undefined/null
+          // Exception: rating should be empty string if null/undefined (not 'null')
+          if (header === 'rating') {
+            value = (value !== null && value !== undefined && value !== '') ? String(value) : '';
+          } else {
+            value = value || '';
+          }
         }
         
         // Handle boolean
@@ -446,9 +531,11 @@ function saveAccount(accountData) {
       act: accountData.act || '',
       psat: accountData.psat || '',
       majors: accountData.majors || [],
-      activities: accountData.activities || '',
+      ap_courses: accountData.ap_courses || [],
+      activities: Array.isArray(accountData.activities) ? accountData.activities : [],
       interests: accountData.interests || [],
       career_goals: accountData.career_goals || accountData.careerGoals || '',
+      rating: accountData.rating || null,
       created_at: now,
       updated_at: now
     });
@@ -463,7 +550,7 @@ function generateUserId() {
 }
 
 // Profile API endpoint - GET
-app.get('/api/profile', (req, res) => {
+app.get('/api/profile', async (req, res) => {
   try {
     const userId = req.query.user_id;
     
@@ -488,8 +575,18 @@ app.get('/api/profile', (req, res) => {
         apCourses: [],
         activities: '',
         interests: [],
-        careerGoals: ''
+        careerGoals: '',
+        rating: null
       });
+    }
+    
+    // Only return rating if it exists in the account (profile was saved and rated)
+    // Don't calculate on-the-fly - rating should only exist after profile is saved
+    // Parse rating as number (it comes from CSV as string)
+    let studentRating = null;
+    if (account.rating !== null && account.rating !== undefined && account.rating !== '') {
+      const ratingNum = typeof account.rating === 'string' ? parseFloat(account.rating) : account.rating;
+      studentRating = !isNaN(ratingNum) ? ratingNum : null;
     }
     
     // Transform to frontend format
@@ -504,9 +601,10 @@ app.get('/api/profile', (req, res) => {
       psat: account.psat || '',
       majors: account.majors || [],
       apCourses: account.ap_courses || [],
-      activities: account.activities || '',
+      activities: Array.isArray(account.activities) ? account.activities : [], // Return as array (legacy strings are converted to [] in readAccounts)
       interests: account.interests || [],
-      careerGoals: account.career_goals || ''
+      careerGoals: account.career_goals || '',
+      rating: studentRating
     });
   } catch (error) {
     console.error('Error fetching profile:', error);
@@ -524,19 +622,23 @@ app.post('/api/profile', async (req, res) => {
     }
 
     // Compute a private rating for this student (not returned to client)
-    let rating = '';
+    let rating = null;
     try {
-      rating = await rateStudent({
+      const calculatedRating = await rateStudent({
         gpa: profileData.gpa,
         weighted: profileData.weighted,
         sat: profileData.sat,
         act: profileData.act,
         apCourses: profileData.apCourses || [],
-        activities: profileData.activities || ''
+        activities: profileData.activities || [] // Pass as array (rateStudent handles conversion)
       });
+      // Only set rating if it's a valid number
+      if (calculatedRating !== null && calculatedRating !== undefined && !isNaN(calculatedRating)) {
+        rating = calculatedRating;
+      }
     } catch (e) {
       console.error('Error rating student profile:', e);
-      rating = '';
+      rating = null;
     }
     
     // Transform frontend format to backend format
@@ -551,7 +653,7 @@ app.post('/api/profile', async (req, res) => {
       psat: profileData.psat || '',
       majors: profileData.majors || [],
       ap_courses: profileData.apCourses || [],
-      activities: profileData.activities || '',
+      activities: Array.isArray(profileData.activities) ? profileData.activities : [], // Store as array
       interests: profileData.interests || [],
       career_goals: profileData.careerGoals || profileData.career_goals || '',
       rating: rating
@@ -594,7 +696,7 @@ app.listen(PORT, '0.0.0.0', () => {
   if (collegeCount > 0) {
     console.log(`✓ Loaded ${collegeCount} colleges from CSV`);
   } else {
-    console.warn('⚠ Warning: No college data loaded from CSV. Check data/us_universities_enriched.csv');
+    console.warn('⚠ Warning: No college data loaded from CSV. Check data/university_data.csv');
   }
   
   // Initialize accounts storage

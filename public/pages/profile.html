@@ -19,8 +19,8 @@
     <div class="header-content container">
       <div class="logo">
         <a href="/index.html" style="display: flex; align-items: center; gap: 0.5rem; text-decoration: none; color: inherit;">
-          <img src="/media/logo/logo64x64.png" alt="Path Pal Logo">
-          <h1>Path Pal</h1>
+        <img src="/media/logo/logo64x64.png" alt="Path Pal Logo">
+        <h1>Path Pal</h1>
         </a>
       </div>
       <button class="menu-toggle" aria-label="Toggle menu"><img src="/media/icons/Hamburger128x128.png" alt="Menu" style="width: 24px; height: 24px;"></button>
@@ -32,7 +32,7 @@
       <li><a href="/index.html"><img src="/media/icons/Home256x256.png" alt="Home" class="nav-icon"> Home</a></li>
       <li><a href="/profile.html" class="active"><img src="/media/icons/Profile256x256.png" alt="Profile" class="nav-icon"> My Profile</a></li>
       <li><a href="/odds.html"><img src="/media/icons/Odds256x256.png" alt="Admissions Odds" class="nav-icon"> Admissions Odds</a></li>
-      <li><a href="/simulator.html"><img src="/media/icons/Book256x256.png" alt="What If" class="nav-icon"> "What If" Simulator</a></li>
+      <li><a href="/simulator.html"><img src="/media/icons/WhatIf256x256.png" alt="What If" class="nav-icon"> "What If" Simulator</a></li>
       <li><a href="/explorer.html"><img src="/media/icons/Search256x256.png" alt="College Explorer" class="nav-icon"> College Explorer</a></li>
       <li><a href="/career.html"><img src="/media/icons/DollarSign256x256.png" alt="Career & Salary Paths" class="nav-icon"> Career & Salary Paths</a></li>
       <li><a href="/activities.html"><img src="/media/icons/Activity256x256.png" alt="Activities" class="nav-icon"> Activity & Internship Recs</a></li>
@@ -271,7 +271,7 @@
 
   <footer>
     <div class="container">
-      <p>&copy; 2025 Path Pal. v1.06</p>
+      <p>&copy; 2025 Path Pal. v1.07</p>
     </div>
   </footer>
 
@@ -501,26 +501,79 @@
         document.getElementById('weighted').checked = profile.weighted !== false;
         document.getElementById('career-goals').value = profile.careerGoals || '';
         
-        // Initialize test section - default to SAT if any SAT score exists, otherwise ACT, then PSAT
+        // Initialize test section - load saved test type or default based on scores
         const testTypeSelect = document.getElementById('test-type');
         let initialType = '';
         if (testTypeSelect) {
-          if (profile.sat) initialType = 'SAT';
-          else if (profile.act) initialType = 'ACT';
-          else if (profile.psat) initialType = 'PSAT';
+          // First check if test type is saved in profile or localStorage
+          const savedTestType = profile.testType || localStorage.getItem('test-type');
+          if (savedTestType) {
+            initialType = savedTestType;
+          } else {
+            // Fallback: determine from existing scores
+            if (profile.sat) initialType = 'SAT';
+            else if (profile.act) initialType = 'ACT';
+            else if (profile.psat) initialType = 'PSAT';
+          }
 
           testTypeSelect.value = initialType;
           showTestSection(initialType);
         }
 
-        // If we have total scores from an earlier version, show them in the summary fields
-        if (profile.sat && document.getElementById('sat-total')) {
+        // Load individual test scores (from profile or localStorage)
+        const savedTestScores = localStorage.getItem('test-scores');
+        let testScores = {};
+        if (savedTestScores) {
+          try {
+            testScores = JSON.parse(savedTestScores);
+          } catch (e) {
+            testScores = {};
+          }
+        }
+        
+        // Use profile values if available, otherwise use localStorage
+        if (document.getElementById('sat-reading')) {
+          document.getElementById('sat-reading').value = profile.satReading || testScores.satReading || '';
+        }
+        if (document.getElementById('sat-math')) {
+          document.getElementById('sat-math').value = profile.satMath || testScores.satMath || '';
+        }
+        if (document.getElementById('psat-reading')) {
+          document.getElementById('psat-reading').value = profile.psatReading || testScores.psatReading || '';
+        }
+        if (document.getElementById('psat-math')) {
+          document.getElementById('psat-math').value = profile.psatMath || testScores.psatMath || '';
+        }
+        if (document.getElementById('act-english')) {
+          document.getElementById('act-english').value = profile.actEnglish || testScores.actEnglish || '';
+        }
+        if (document.getElementById('act-math')) {
+          document.getElementById('act-math').value = profile.actMath || testScores.actMath || '';
+        }
+        if (document.getElementById('act-reading')) {
+          document.getElementById('act-reading').value = profile.actReading || testScores.actReading || '';
+        }
+        if (document.getElementById('act-science')) {
+          document.getElementById('act-science').value = profile.actScience || testScores.actScience || '';
+        }
+
+        // Update totals after loading individual scores
+        if (initialType === 'SAT') {
+          updateSatTotal();
+        } else if (initialType === 'PSAT') {
+          updatePsatTotal();
+        } else if (initialType === 'ACT') {
+          updateActComposite();
+        }
+
+        // If we have total scores from an earlier version (but no individual scores), show them in the summary fields
+        if (profile.sat && document.getElementById('sat-total') && !profile.satReading && !profile.satMath) {
           document.getElementById('sat-total').textContent = profile.sat;
         }
-        if (profile.psat && document.getElementById('psat-total')) {
+        if (profile.psat && document.getElementById('psat-total') && !profile.psatReading && !profile.psatMath) {
           document.getElementById('psat-total').textContent = profile.psat;
         }
-        if (profile.act && document.getElementById('act-composite')) {
+        if (profile.act && document.getElementById('act-composite') && !profile.actEnglish && !profile.actMath) {
           document.getElementById('act-composite').textContent = profile.act;
         }
 
@@ -532,21 +585,46 @@
           renderApRows(apCountSelect.value, apCourses);
         }
 
-        // Initialize activities from stored string (best-effort parse)
+        // Initialize activities - handle both JSON array and legacy string format
         const activitiesCountSelectInit = document.getElementById('activities-count');
-        const activitiesRaw = profile.activities || '';
         let activities = [];
-        if (activitiesRaw) {
-          const lines = activitiesRaw.split('\n').map(l => l.trim()).filter(Boolean);
-          activities = lines.slice(0, 10).map(line => {
-            // Try to parse "X hrs — description" or "X hours: description"
-            const match = line.match(/^(\d+)\s*(hrs?|hours?|h)?\s*[-–:]\s*(.+)$/i);
-            if (match) {
-              return { hours: match[1], description: match[3] };
+        
+        if (profile.activities) {
+          // If it's already an array, use it directly
+          if (Array.isArray(profile.activities)) {
+            activities = profile.activities;
+          } 
+          // If it's a string, try to parse as JSON first
+          else if (typeof profile.activities === 'string') {
+            try {
+              const parsed = JSON.parse(profile.activities);
+              if (Array.isArray(parsed)) {
+                activities = parsed;
+              } else {
+                // Legacy string format: "X hrs — description" per line
+                const lines = profile.activities.split('\n').map(l => l.trim()).filter(Boolean);
+                activities = lines.slice(0, 10).map(line => {
+                  const match = line.match(/^(\d+)\s*(hrs?|hours?|h)?\s*[-–:]\s*(.+)$/i);
+                  if (match) {
+                    return { hours: match[1], description: match[3] };
+                  }
+                  return { hours: '', description: line };
+                });
+              }
+            } catch (e) {
+              // Not valid JSON, treat as legacy string format
+              const lines = profile.activities.split('\n').map(l => l.trim()).filter(Boolean);
+              activities = lines.slice(0, 10).map(line => {
+                const match = line.match(/^(\d+)\s*(hrs?|hours?|h)?\s*[-–:]\s*(.+)$/i);
+                if (match) {
+                  return { hours: match[1], description: match[3] };
+                }
+                return { hours: '', description: line };
+              });
             }
-            return { hours: '', description: line };
-          });
+          }
         }
+        
         if (activitiesCountSelectInit) {
           activitiesCountSelectInit.value = activities.length;
           renderActivitiesRows(activities.length, activities);
@@ -678,6 +756,10 @@
       try {
         // Compute test totals based on current selection
         const testType = document.getElementById('test-type') ? document.getElementById('test-type').value : '';
+        // Save test type to localStorage
+        if (testType) {
+          localStorage.setItem('test-type', testType);
+        }
         let satTotal = '';
         let actComposite = '';
         let psatTotal = '';
@@ -721,7 +803,7 @@
           }
         }
 
-        // Collect activities into a Common App-style string
+        // Collect activities as JSON array
         const activitiesArr = [];
         const activitiesCountVal = document.getElementById('activities-count') ? parseInt(document.getElementById('activities-count').value, 10) || 0 : 0;
         for (let i = 0; i < activitiesCountVal && i < 10; i++) {
@@ -730,23 +812,53 @@
           const hours = hoursEl ? (hoursEl.value || '').trim() : '';
           const desc = descEl ? (descEl.value || '').trim() : '';
           if (desc) {
-            const prefix = hours ? `${hours} hrs — ` : '';
-            activitiesArr.push(prefix + desc);
+            activitiesArr.push({ hours: hours, description: desc });
           }
         }
-        const activitiesText = activitiesArr.join('\n');
+
+        // Get individual test scores for saving
+        const satReading = testType === 'SAT' ? (parseScore('sat-reading') || '') : '';
+        const satMath = testType === 'SAT' ? (parseScore('sat-math') || '') : '';
+        const psatReading = testType === 'PSAT' ? (parseScore('psat-reading') || '') : '';
+        const psatMath = testType === 'PSAT' ? (parseScore('psat-math') || '') : '';
+        const actEnglish = testType === 'ACT' ? (parseScore('act-english') || '') : '';
+        const actMath = testType === 'ACT' ? (parseScore('act-math') || '') : '';
+        const actReading = testType === 'ACT' ? (parseScore('act-reading') || '') : '';
+        const actScience = testType === 'ACT' ? (parseScore('act-science') || '') : '';
+
+        // Save individual test scores to localStorage
+        const testScores = {
+          satReading: satReading,
+          satMath: satMath,
+          psatReading: psatReading,
+          psatMath: psatMath,
+          actEnglish: actEnglish,
+          actMath: actMath,
+          actReading: actReading,
+          actScience: actScience
+        };
+        localStorage.setItem('test-scores', JSON.stringify(testScores));
 
         const profile = {
           name: document.getElementById('name').value,
           grade: document.getElementById('grade').value,
           gpa: document.getElementById('gpa').value,
           weighted: document.getElementById('weighted').checked,
+          testType: testType, // Save the test type selection
           sat: satTotal || '',
           act: actComposite || '',
           psat: psatTotal || '',
+          satReading: satReading,
+          satMath: satMath,
+          psatReading: psatReading,
+          psatMath: psatMath,
+          actEnglish: actEnglish,
+          actMath: actMath,
+          actReading: actReading,
+          actScience: actScience,
           majors: Array.from(document.getElementById('majors').selectedOptions).map(o => o.value),
           apCourses: apCourses,
-          activities: activitiesText,
+          activities: activitiesArr, // Store as JSON array
           careerGoals: document.getElementById('career-goals').value
         };
         

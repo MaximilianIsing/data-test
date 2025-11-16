@@ -19,8 +19,8 @@
     <div class="header-content container">
       <div class="logo">
         <a href="/index.html" style="display: flex; align-items: center; gap: 0.5rem; text-decoration: none; color: inherit;">
-          <img src="/media/logo/logo64x64.png" alt="Path Pal Logo">
-          <h1>Path Pal</h1>
+        <img src="/media/logo/logo64x64.png" alt="Path Pal Logo">
+        <h1>Path Pal</h1>
         </a>
       </div>
       <button class="menu-toggle" aria-label="Toggle menu"><img src="/media/icons/Hamburger128x128.png" alt="Menu" style="width: 24px; height: 24px;"></button>
@@ -60,8 +60,15 @@
             <option value="Education">Education</option>
             <option value="Psychology">Psychology</option>
             <option value="Biology">Biology</option>
+            <option value="Chemistry">Chemistry</option>
             <option value="Mathematics">Mathematics</option>
+            <option value="Physics">Physics</option>
             <option value="Economics">Economics</option>
+            <option value="Social Sciences">Social Sciences</option>
+            <option value="Political Science">Political Science</option>
+            <option value="Journalism">Journalism</option>
+            <option value="Art">Art</option>
+            <option value="Music">Music</option>
           </select>
         </div>
       </div>
@@ -97,7 +104,7 @@
 
   <footer>
     <div class="container">
-      <p>&copy; 2025 Path Pal. v1.06</p>
+      <p>&copy; 2025 Path Pal. v1.07</p>
     </div>
   </footer>
 
@@ -148,6 +155,149 @@
           { title: 'Medical Researcher', salary: '90k-150k', skills: 'Research Methodology, Analysis', degree: 'PhD or MD' }
         ],
         strongColleges: ['Harvard University', 'Johns Hopkins University', 'Stanford University']
+      },
+      'Law/Pre-Law': {
+        medianSalary: 75000,
+        placementRate: 0.87,
+        industries: ['Law Firms', 'Government', 'Corporate Legal', 'Non-Profit', 'Public Interest'],
+        paths: [
+          { title: 'Attorney', salary: '70k-200k', skills: 'Legal Research, Writing, Advocacy', degree: 'JD' },
+          { title: 'Corporate Lawyer', salary: '100k-250k', skills: 'Contract Law, Negotiation', degree: 'JD' },
+          { title: 'Public Defender', salary: '55k-90k', skills: 'Criminal Law, Client Advocacy', degree: 'JD' }
+        ],
+        strongColleges: ['Yale University', 'Harvard University', 'Stanford University']
+      },
+      'Education': {
+        medianSalary: 50000,
+        placementRate: 0.91,
+        industries: ['K-12 Schools', 'Higher Education', 'Educational Administration', 'Curriculum Development', 'Educational Technology'],
+        paths: [
+          { title: 'Teacher', salary: '45k-75k', skills: 'Subject Knowledge, Classroom Management', degree: 'Bachelor\'s + Teaching License' },
+          { title: 'School Administrator', salary: '70k-120k', skills: 'Leadership, Education Policy', degree: 'Master\'s in Education' },
+          { title: 'Curriculum Developer', salary: '55k-90k', skills: 'Instructional Design, Assessment', degree: 'Master\'s preferred' }
+        ],
+        strongColleges: ['Harvard University', 'Stanford University', 'University of Michigan']
+      },
+      'Psychology': {
+        medianSalary: 60000,
+        placementRate: 0.85,
+        industries: ['Healthcare', 'Mental Health', 'Research', 'Human Resources', 'Education'],
+        paths: [
+          { title: 'Clinical Psychologist', salary: '70k-120k', skills: 'Therapy, Assessment, Diagnosis', degree: 'PhD or PsyD' },
+          { title: 'School Psychologist', salary: '60k-95k', skills: 'Child Development, Assessment', degree: 'Master\'s or PhD' },
+          { title: 'Industrial-Organizational Psychologist', salary: '80k-130k', skills: 'Organizational Behavior, Data Analysis', degree: 'Master\'s or PhD' }
+        ],
+        strongColleges: ['Stanford University', 'University of California Berkeley', 'Harvard University']
+      },
+      'Biology': {
+        medianSalary: 65000,
+        placementRate: 0.88,
+        industries: ['Healthcare', 'Biotechnology', 'Pharmaceuticals', 'Research', 'Environmental Science'],
+        paths: [
+          { title: 'Research Scientist', salary: '70k-120k', skills: 'Laboratory Techniques, Data Analysis', degree: 'PhD preferred' },
+          { title: 'Biomedical Engineer', salary: '75k-130k', skills: 'Biology, Engineering Principles', degree: 'Bachelor\'s or Master\'s' },
+          { title: 'Pharmaceutical Sales', salary: '60k-100k', skills: 'Communication, Product Knowledge', degree: 'Bachelor\'s' }
+        ],
+        strongColleges: ['MIT', 'Stanford University', 'Johns Hopkins University']
+      },
+      'Chemistry': {
+        medianSalary: 70000,
+        placementRate: 0.89,
+        industries: ['Pharmaceuticals', 'Chemical Manufacturing', 'Research', 'Materials Science', 'Environmental Science'],
+        paths: [
+          { title: 'Chemist', salary: '65k-110k', skills: 'Laboratory Techniques, Analysis', degree: 'Bachelor\'s or Master\'s' },
+          { title: 'Pharmaceutical Chemist', salary: '75k-130k', skills: 'Drug Development, Quality Control', degree: 'Master\'s or PhD' },
+          { title: 'Materials Scientist', salary: '80k-140k', skills: 'Materials Analysis, Research', degree: 'Master\'s or PhD' }
+        ],
+        strongColleges: ['MIT', 'California Institute of Technology', 'University of California Berkeley']
+      },
+      'Mathematics': {
+        medianSalary: 85000,
+        placementRate: 0.90,
+        industries: ['Finance', 'Technology', 'Actuarial Science', 'Research', 'Education'],
+        paths: [
+          { title: 'Data Analyst', salary: '70k-110k', skills: 'Statistical Analysis, Programming', degree: 'Bachelor\'s' },
+          { title: 'Actuary', salary: '80k-150k', skills: 'Risk Assessment, Statistics', degree: 'Bachelor\'s + Certification' },
+          { title: 'Quantitative Analyst', salary: '100k-200k', skills: 'Mathematical Modeling, Finance', degree: 'Master\'s or PhD' }
+        ],
+        strongColleges: ['MIT', 'Princeton University', 'Stanford University']
+      },
+      'Physics': {
+        medianSalary: 80000,
+        placementRate: 0.87,
+        industries: ['Research', 'Technology', 'Aerospace', 'Energy', 'Engineering'],
+        paths: [
+          { title: 'Research Physicist', salary: '90k-150k', skills: 'Theoretical Physics, Experimentation', degree: 'PhD' },
+          { title: 'Engineering Physicist', salary: '85k-140k', skills: 'Applied Physics, Engineering', degree: 'Master\'s or PhD' },
+          { title: 'Data Scientist', salary: '100k-160k', skills: 'Statistical Modeling, Programming', degree: 'Master\'s or PhD' }
+        ],
+        strongColleges: ['MIT', 'California Institute of Technology', 'Princeton University']
+      },
+      'Economics': {
+        medianSalary: 72000,
+        placementRate: 0.86,
+        industries: ['Finance', 'Consulting', 'Government', 'Research', 'Banking'],
+        paths: [
+          { title: 'Economic Analyst', salary: '65k-110k', skills: 'Data Analysis, Economic Modeling', degree: 'Bachelor\'s or Master\'s' },
+          { title: 'Financial Analyst', salary: '70k-120k', skills: 'Financial Modeling, Market Analysis', degree: 'Bachelor\'s' },
+          { title: 'Policy Analyst', salary: '60k-100k', skills: 'Research, Policy Evaluation', degree: 'Master\'s preferred' }
+        ],
+        strongColleges: ['University of Chicago', 'Harvard University', 'MIT']
+      },
+      'Social Sciences': {
+        medianSalary: 55000,
+        placementRate: 0.83,
+        industries: ['Research', 'Government', 'Non-Profit', 'Social Services', 'Education'],
+        paths: [
+          { title: 'Social Worker', salary: '45k-75k', skills: 'Counseling, Case Management', degree: 'Master\'s in Social Work' },
+          { title: 'Policy Researcher', salary: '55k-90k', skills: 'Research, Data Analysis', degree: 'Master\'s preferred' },
+          { title: 'Community Organizer', salary: '40k-70k', skills: 'Communication, Advocacy', degree: 'Bachelor\'s' }
+        ],
+        strongColleges: ['Harvard University', 'University of California Berkeley', 'University of Michigan']
+      },
+      'Political Science': {
+        medianSalary: 60000,
+        placementRate: 0.84,
+        industries: ['Government', 'Law', 'Public Policy', 'Non-Profit', 'Journalism'],
+        paths: [
+          { title: 'Policy Analyst', salary: '55k-95k', skills: 'Research, Policy Evaluation', degree: 'Master\'s preferred' },
+          { title: 'Legislative Assistant', salary: '45k-75k', skills: 'Research, Writing, Communication', degree: 'Bachelor\'s' },
+          { title: 'Political Consultant', salary: '60k-120k', skills: 'Strategy, Communication, Analysis', degree: 'Bachelor\'s or Master\'s' }
+        ],
+        strongColleges: ['Harvard University', 'Yale University', 'Princeton University']
+      },
+      'Journalism': {
+        medianSalary: 48000,
+        placementRate: 0.82,
+        industries: ['Media', 'Broadcasting', 'Digital Media', 'Publishing', 'Public Relations'],
+        paths: [
+          { title: 'Journalist', salary: '40k-80k', skills: 'Writing, Research, Interviewing', degree: 'Bachelor\'s' },
+          { title: 'News Producer', salary: '50k-90k', skills: 'Content Creation, Editing', degree: 'Bachelor\'s' },
+          { title: 'Public Relations Specialist', salary: '50k-85k', skills: 'Communication, Media Relations', degree: 'Bachelor\'s' }
+        ],
+        strongColleges: ['Northwestern University', 'Columbia University', 'University of Missouri']
+      },
+      'Art': {
+        medianSalary: 45000,
+        placementRate: 0.78,
+        industries: ['Design', 'Fine Arts', 'Entertainment', 'Advertising', 'Education'],
+        paths: [
+          { title: 'Graphic Designer', salary: '45k-75k', skills: 'Design Software, Creativity', degree: 'Bachelor\'s' },
+          { title: 'Art Director', salary: '60k-100k', skills: 'Creative Vision, Leadership', degree: 'Bachelor\'s + Experience' },
+          { title: 'Fine Artist', salary: '30k-80k', skills: 'Artistic Technique, Portfolio', degree: 'Bachelor\'s or MFA' }
+        ],
+        strongColleges: ['Rhode Island School of Design', 'Yale University', 'School of the Art Institute of Chicago']
+      },
+      'Music': {
+        medianSalary: 42000,
+        placementRate: 0.75,
+        industries: ['Entertainment', 'Education', 'Performance', 'Music Production', 'Media'],
+        paths: [
+          { title: 'Music Teacher', salary: '40k-70k', skills: 'Musical Knowledge, Teaching', degree: 'Bachelor\'s + Teaching License' },
+          { title: 'Music Producer', salary: '45k-100k', skills: 'Audio Engineering, Creativity', degree: 'Bachelor\'s or Experience' },
+          { title: 'Performing Musician', salary: '30k-150k', skills: 'Performance, Musical Talent', degree: 'Bachelor\'s or Conservatory' }
+        ],
+        strongColleges: ['Juilliard School', 'Berklee College of Music', 'Curtis Institute of Music']
       }
     };
 
@@ -165,16 +315,11 @@
 
       // Salary chart
       const salaryContainer = document.getElementById('salary-chart');
-      const maxSalary = 200000;
-      const percentage = (data.medianSalary / maxSalary) * 100;
       salaryContainer.innerHTML = `
         <div style="background: var(--light-mint); padding: 1rem; border-radius: 8px;">
-          <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+          <div style="display: flex; justify-content: space-between;">
             <span><strong>Median Starting Salary</strong></span>
             <span style="color: var(--primary-green); font-weight: bold; font-size: 1.2rem;">$${(data.medianSalary / 1000).toFixed(0)}k</span>
-          </div>
-          <div class="progress-bar">
-            <div class="progress-fill" style="width: ${percentage}%; background: var(--primary-green);"></div>
           </div>
         </div>
       `;
@@ -240,10 +385,14 @@
         if (profile.majors && profile.majors.length > 0) {
           const majorSelect = document.getElementById('career-major');
           const firstMajor = profile.majors[0];
+          
         if (Array.from(majorSelect.options).some(opt => opt.value === firstMajor)) {
           majorSelect.value = firstMajor;
           loadCareerData();
         }
+        }
+      } catch (error) {
+        console.error('Error loading career profile data:', error);
       }
     });
   </script>

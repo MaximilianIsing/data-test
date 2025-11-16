@@ -32,7 +32,7 @@
       <li><a href="/index.html"><img src="/media/icons/Home256x256.png" alt="Home" class="nav-icon"> Home</a></li>
       <li><a href="/profile.html"><img src="/media/icons/Profile256x256.png" alt="Profile" class="nav-icon"> My Profile</a></li>
       <li><a href="/odds.html"><img src="/media/icons/Odds256x256.png" alt="Admissions Odds" class="nav-icon"> Admissions Odds</a></li>
-      <li><a href="/simulator.html"><img src="/media/icons/Book256x256.png" alt="What If" class="nav-icon"> "What If" Simulator</a></li>
+      <li><a href="/simulator.html"><img src="/media/icons/WhatIf256x256.png" alt="What If" class="nav-icon"> "What If" Simulator</a></li>
       <li><a href="/explorer.html"><img src="/media/icons/Search256x256.png" alt="College Explorer" class="nav-icon"> College Explorer</a></li>
       <li><a href="/career.html"><img src="/media/icons/DollarSign256x256.png" alt="Career & Salary Paths" class="nav-icon"> Career & Salary Paths</a></li>
       <li><a href="/activities.html"><img src="/media/icons/Activity256x256.png" alt="Activities" class="nav-icon"> Activity & Internship Recs</a></li>
@@ -68,14 +68,54 @@
 
   <footer>
     <div class="container">
-      <p>&copy; 2025 Path Pal. v1.06</p>
+      <p>&copy; 2025 Path Pal. v1.07</p>
     </div>
   </footer>
 
   <script src="/js/api.js"></script>
   <script src="/js/app.js"></script>
   <script>
-    document.addEventListener('DOMContentLoaded', () => {
+    // Client-side implementation of getAdmissionOdds (from rate-system.js)
+    function getAdmissionOdds(studentScore, collegeScore) {
+      // Parse inputs
+      const student = typeof studentScore === 'string' ? parseFloat(studentScore) : (studentScore || 0);
+      const college = typeof collegeScore === 'string' ? parseFloat(collegeScore) : (collegeScore || 0);
+
+      // Ensure scores are in valid range
+      const studentNorm = Math.max(0, Math.min(100, student));
+      const collegeNorm = Math.max(0, Math.min(100, college));
+
+      // Calculate delta (difference)
+      const delta = studentNorm - collegeNorm;
+
+      // Base odds when scores are equal
+      const baseOdds = 50; // 50% when student matches college
+
+      // Use a sigmoid-like curve for smooth transitions
+      const deltaMultiplier = 1.5; // Each point of delta = 1.5% change
+      
+      // Apply sigmoid-like curve for more realistic distribution
+      const sigmoidFactor = 0.8; // Smoothing factor
+      const normalizedDelta = delta / 50; // Normalize to -1 to 1 range
+      const sigmoidDelta = (normalizedDelta / (1 + Math.abs(normalizedDelta) * sigmoidFactor)) * 50;
+      let odds = baseOdds + (sigmoidDelta * deltaMultiplier);
+
+      // Clamp to reasonable bounds (3% to 97%)
+      odds = Math.max(3, Math.min(97, odds));
+
+      // Round to nearest integer
+      return Math.round(odds);
+    }
+
+    function categorizeSchool(odds) {
+      if (odds === null || odds === undefined) return { category: 'unknown', label: 'Unknown' };
+      if (odds >= 70) return { category: 'safety', label: 'Safety' };
+      if (odds >= 40) return { category: 'target', label: 'Target' };
+      return { category: 'reach', label: 'Reach' };
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      await initializeUserId();
       loadSavedColleges();
     });
 
@@ -83,6 +123,11 @@
       const savedColleges = SavedColleges.get();
       const profile = await UserProfile.get();
       const container = document.getElementById('saved-colleges-list');
+
+      // Get student rating (only exists if profile is complete)
+      const studentRating = (profile.rating !== null && profile.rating !== undefined && profile.rating !== '') 
+        ? profile.rating 
+        : null;
 
       if (savedColleges.length === 0) {
         container.innerHTML = `
@@ -101,7 +146,16 @@
       container.innerHTML = '<h3 style="color: var(--primary-green); margin: 1rem 0;">Your Saved Colleges</h3>';
 
       savedColleges.forEach(college => {
-        const odds = calculateAdmissionOdds(profile, college);
+        // Calculate admission odds using actual ratings
+        let odds;
+        let oddsDisplay;
+        if (studentRating !== null && studentRating !== undefined && college.rating !== null && college.rating !== undefined) {
+          odds = getAdmissionOdds(studentRating, college.rating);
+          oddsDisplay = odds + '%';
+        } else {
+          odds = null;
+          oddsDisplay = 'N/A';
+        }
         const category = categorizeSchool(odds);
         
         const card = document.createElement('div');
@@ -115,19 +169,19 @@
               <h4 style="color: var(--primary-green); margin-bottom: 0.5rem;">${college.name}</h4>
               <p style="color: var(--text-light); font-size: 0.9rem; margin-bottom: 0.25rem;"><img src="/media/icons/Location128x128.png" alt="Location" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 0.25rem;"> ${college.location}</p>
               <p style="color: var(--text-light); font-size: 0.9rem; margin-bottom: 0.25rem;">${college.type} • ${college.size}</p>
-              <p style="color: var(--text-light); font-size: 0.9rem;">Acceptance Rate: ${(college.acceptanceRate * 100).toFixed(1)}%</p>
+              <p style="color: var(--text-light); font-size: 0.9rem;">Acceptance Rate: ${Math.round(college.acceptanceRate * 1000) /10}%</p>
             </div>
             <span class="badge badge-${category.category}">${category.label}</span>
           </div>
           
           <div style="background: var(--light-mint); padding: 1rem; border-radius: 8px; text-align: center; margin-bottom: 1rem;">
-            <div style="font-size: 2rem; font-weight: bold; color: var(--primary-green);">${odds.toFixed(0)}%</div>
+            <div style="font-size: 2rem; font-weight: bold; color: var(--primary-green);">${oddsDisplay}</div>
             <div style="color: var(--text-light); font-size: 0.85rem;">Your Admission Odds</div>
           </div>
 
           <div style="margin-bottom: 1rem;">
             <label style="display: block; margin-bottom: 0.5rem; font-weight: bold; color: var(--text-dark);">Application Status</label>
-            <select class="application-status" data-college-id="${college.id}" onchange="updateApplicationStatus(${college.id}, this.value)" style="width: 100%; padding: 0.75rem; border: 2px solid var(--border-color); border-radius: 8px; font-family: 'Arvo', serif;">
+            <select class="application-status" data-college-id="${college.id}" onchange="updateApplicationStatus('${college.id}', this.value)" style="width: 100%; padding: 0.75rem; border: 2px solid var(--border-color); border-radius: 8px; font-family: 'Arvo', serif;">
               <option value="not-started">Not Started</option>
               <option value="in-progress">In Progress</option>
               <option value="submitted">Submitted</option>
@@ -138,23 +192,22 @@
           </div>
           
           <div style="display: flex; gap: 0.5rem;">
-            <button class="btn btn-secondary" onclick="window.location.href='/odds.html'" style="flex: 1;">
-              View Odds
-            </button>
             <button class="btn btn-secondary" onclick="window.location.href='/simulator.html'" style="flex: 1;">
               Test Changes
             </button>
-            <button class="btn" onclick="removeCollege(${college.id})" style="flex: 1; background: var(--danger); color: white;">
-              Remove
+            <button class="btn btn-secondary" onclick="removeCollege('${college.id}')" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+              <span>Unsave</span>
+              <img src="/media/icons/StarFull256x256.png" alt="Unsave" style="width: 20px; height: 20px;">
             </button>
           </div>
         `;
         
-        // Load saved status
+        // Load saved status (convert ID to string for consistent matching)
         const savedStatus = Storage.get('applicationStatuses', {});
         const statusSelect = card.querySelector('.application-status');
-        if (statusSelect && savedStatus[college.id]) {
-          statusSelect.value = savedStatus[college.id];
+        const collegeIdStr = String(college.id);
+        if (statusSelect && savedStatus[collegeIdStr]) {
+          statusSelect.value = savedStatus[collegeIdStr];
         }
         
         container.appendChild(card);
@@ -164,19 +217,23 @@
     }
 
     function removeCollege(collegeId) {
-      if (confirm('Remove this college from your saved list?')) {
-        SavedColleges.remove(collegeId);
-        loadSavedColleges();
-        showNotification('College removed from saved list.', 'info');
-      }
+      // Convert to string if it's a number to ensure consistent ID matching
+      const id = String(collegeId);
+      SavedColleges.remove(id);
+      loadSavedColleges();
+      showNotification('College removed from saved list.', 'info');
     }
 
     function updateApplicationStatus(collegeId, status) {
+      // Convert to string if it's a number to ensure consistent ID matching
+      const id = String(collegeId);
       const statuses = Storage.get('applicationStatuses', {});
-      statuses[collegeId] = status;
+      statuses[id] = status;
       Storage.set('applicationStatuses', statuses);
       
-      loadSavedColleges();
+      // Update the progress tracking without reloading everything
+      const savedColleges = SavedColleges.get();
+      loadProgressTracking(savedColleges);
       showNotification('Application status updated!', 'success');
     }
 
@@ -195,7 +252,8 @@
       };
 
       savedColleges.forEach(college => {
-        const status = statuses[college.id] || 'not-started';
+        const collegeIdStr = String(college.id);
+        const status = statuses[collegeIdStr] || 'not-started';
         stats[status] = (stats[status] || 0) + 1;
       });
 

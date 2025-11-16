@@ -764,6 +764,11 @@ main {
   color: var(--white);
 }
 
+.btn-secondary.no-hover:hover {
+  background: var(--light-mint) !important;
+  color: var(--primary-green) !important;
+}
+
 /* Badges */
 .badge {
   display: inline-block;
@@ -792,7 +797,8 @@ main {
 .chat-container {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 140px);
+  height: 560px;
+  max-height: 70vh;
 }
 
 .chat-messages {

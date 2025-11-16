@@ -32,7 +32,7 @@
       <li><a href="/index.html"><img src="/media/icons/Home256x256.png" alt="Home" class="nav-icon"> Home</a></li>
       <li><a href="/profile.html"><img src="/media/icons/Profile256x256.png" alt="Profile" class="nav-icon"> My Profile</a></li>
       <li><a href="/odds.html" class="active"><img src="/media/icons/Odds256x256.png" alt="Admissions Odds" class="nav-icon"> Admissions Odds</a></li>
-      <li><a href="/simulator.html"><img src="/media/icons/Book256x256.png" alt="What If" class="nav-icon"> "What If" Simulator</a></li>
+      <li><a href="/simulator.html"><img src="/media/icons/WhatIf256x256.png" alt="What If" class="nav-icon"> "What If" Simulator</a></li>
       <li><a href="/explorer.html"><img src="/media/icons/Search256x256.png" alt="College Explorer" class="nav-icon"> College Explorer</a></li>
       <li><a href="/career.html"><img src="/media/icons/DollarSign256x256.png" alt="Career & Salary Paths" class="nav-icon"> Career & Salary Paths</a></li>
       <li><a href="/activities.html"><img src="/media/icons/Activity256x256.png" alt="Activities" class="nav-icon"> Activity & Internship Recs</a></li>
@@ -64,7 +64,7 @@
 
       <!-- AI Tips Section -->
       <div class="card" id="ai-tips" style="display: none;">
-        <h3>AI Tips to Improve Your Odds</h3>
+        <h3 style="margin-bottom: 0.5rem;">AI Tips to Improve Your Odds</h3>
         <div id="tips-content" class="loading">Loading personalized tips...</div>
       </div>
     </div>
@@ -72,7 +72,7 @@
 
   <footer>
     <div class="container">
-      <p>&copy; Path Pal 2025 — v1.06</p>
+      <p>&copy; Path Pal 2025 — v1.07</p>
     </div>
   </footer>
 
@@ -112,7 +112,9 @@
           <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
             <div>
               <h3 style="color: var(--primary-green); margin-bottom: 0.5rem;">${college.name}</h3>
-              <p style="color: var(--text-light); font-size: 0.9rem;">${college.location} • ${college.type} • ${(college.acceptanceRate * 100).toFixed(1)}% acceptance rate</p>
+              <p style="color: var(--text-light); font-size: 0.9rem;">
+                ${college.location} • ${college.type} • ${Math.round(college.acceptanceRate * 1000) / 10}% acceptance
+              </p>
             </div>
             <span class="badge badge-${category.category}">${category.label}</span>
           </div>
@@ -136,20 +138,45 @@
       }
 
       document.getElementById('ai-tips').style.display = 'block';
+      const tipsContent = document.getElementById('tips-content');
 
+      // Check if tips are saved locally
+      const savedTips = localStorage.getItem('ai-tips');
+      if (savedTips) {
+        try {
+          const tips = JSON.parse(savedTips);
+          displayTips(tips);
+          return; // Use saved tips, don't fetch new ones
+        } catch (e) {
+          // If parsing fails, continue to fetch new tips
+        }
+      }
+
+      // Fetch new tips if not saved
       try {
         const message = `Based on my profile (GPA: ${profile.gpa || 'not set'}, SAT: ${profile.sat || 'not set'}, ACT: ${profile.act || 'not set'}, Grade: ${profile.grade || 'not set'}), what are 3-5 actionable suggestions to improve my admission odds for college? Be specific and concise.`;
         
         const response = await sendChatMessage(message);
         const tips = response.message.split('\n').filter(line => line.trim());
         
-        const tipsContent = document.getElementById('tips-content');
-        tipsContent.innerHTML = '<ul style="list-style: none; padding: 0;">' + 
-          tips.map(tip => `<li style="padding: 0.75rem 0; border-bottom: 1px solid var(--border-color);">• ${tip.trim().replace(/^[-•]\s*/, '')}</li>`).join('') + 
-          '</ul>';
+        // Save tips to localStorage
+        localStorage.setItem('ai-tips', JSON.stringify(tips));
+        
+        displayTips(tips);
       } catch (error) {
-        document.getElementById('tips-content').innerHTML = '<p style="color: var(--text-light);">Unable to load tips at this time. Please try again later.</p>';
+        tipsContent.innerHTML = '<p style="color: var(--text-dark);">Unable to load tips at this time. Please try again later.</p>';
       }
+    }
+
+    function displayTips(tips) {
+      const tipsContent = document.getElementById('tips-content');
+      tipsContent.className = ''; // Remove loading class
+      tipsContent.innerHTML = '<ul style="list-style: none; padding: 0; margin: 0; text-align: left;">' + 
+        tips.map(tip => {
+          const cleanTip = tip.trim().replace(/^[-•]\s*/, '').replace(/^\d+\.\s*/, '');
+          return `<li style="padding: 0.75rem 0; border-bottom: 1px solid var(--border-color); color: var(--text-dark); text-align: left; line-height: 1.6;"><strong style="color: var(--primary-green);">•</strong> ${cleanTip}</li>`;
+        }).join('') + 
+        '</ul>';
     }
   </script>
 </body>
