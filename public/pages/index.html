@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="description" content="v1.08">
+  <meta name="description" content="v1.09">
   <title>Path Pal - Home</title>
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" type="image/png" href="/media/AppIcon.png">
@@ -37,7 +37,7 @@
     </div>
     <div class="desktop-footer-bar">
       <span class="desktop-footer-left">© Path Pal 2025</span>
-      <span class="desktop-footer-right">v1.08</span>
+      <span class="desktop-footer-right">v1.09</span>
     </div>
   </div>
 
@@ -121,39 +121,88 @@
         </div>
       </section>
 
+      <!-- Blog Post Section -->
+      <section class="blog-post-section" onclick="showBlogPost()" style="margin: 1.5rem 0; padding: 0; border: 2px solid var(--primary-green); border-radius: 12px; background: var(--white); cursor: pointer; transition: background 0.2s; overflow: hidden;" onmouseover="this.style.background='var(--light-mint)'" onmouseout="this.style.background='var(--white)'">
+        <img src="/media/blogs/BlogPost%231.png" alt="Blog Post Image" style="width: 100%; height: auto; display: block;">
+        <div style="padding: 1rem; text-align: center;">
+          <h3 style="color: var(--primary-green); margin: 0 0 0.5rem 0;">Why we Made Path Pal</h3>
+          <p style="color: var(--text-dark); margin: 0; font-size: 0.9rem;">Blog Post • 11/23/2025</p>
+        </div>
+      </section>
+
+      <!-- Blog Post Modal -->
+      <div id="blog-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); z-index: 10000; overflow-y: auto; padding: 1rem;">
+        <div style="max-width: 600px; margin: 2rem auto; background: var(--white); border-radius: 12px; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h2 style="color: var(--primary-green); margin: 0;">Why we Made Path Pal</h2>
+            <button onclick="closeBlogPost()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-light); padding: 0; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;">×</button>
+          </div>
+          <div id="blog-content" style="color: var(--text-dark); line-height: 1.6;">
+            <p style="margin-bottom: 1.5rem;">It started with a simple observation: while some students had access to private college counselors, expensive test prep, and personalized guidance, many public school students were navigating the college application process completely alone.</p>
+            
+            <p style="margin-bottom: 1.5rem;">We saw students who had the potential to get into great schools but didn't know where to start. They didn't know which colleges matched their profile, how to improve their chances, or what activities would strengthen their applications. Their schools were understaffed, with one counselor responsible for hundreds of students. Private counseling cost thousands of dollars that their families couldn't afford.</p>
+            
+            <p style="margin-bottom: 1.5rem;">That's when we realized something had to change. Every student deserves access to quality college guidance, regardless of their school's resources or their family's income. So we built Path Pal.</p>
+            
+            <p style="margin-bottom: 1.5rem;">Path Pal was created to level the playing field. We wanted to give every student, especially those in public schools without dedicated college counselors, the same tools and guidance that were previously only available to those who could pay for it.</p>
+            
+            <p style="margin-bottom: 1.5rem;">Our AI counselor is available 24/7, answering questions about college admissions, course selection, and test preparation. Our admissions odds calculator shows students where they stand and how to improve. Our "What If" simulator lets them test different scenarios before making changes. All of this is free and accessible to anyone.</p>
+            
+            <p style="margin-bottom: 1.5rem;">We built Path Pal because we believe that access to quality college guidance shouldn't depend on your zip code or your family's income. Every student deserves a fair shot at reaching their dream schools, and we're here to make sure they get it.</p>
+            
+            <p style="margin-bottom: 0;">This is more than just an app to us. It's our mission to ensure that every student, regardless of their circumstances, has the tools and support they need to succeed. That's why we made Path Pal.</p>
+          </div>
+        </div>
+      </div>
+
       <!-- Quick Access Tiles -->
       <section class="quick-access">
-        <a href="/odds.html" class="tile">
-          <div class="tile-icon"><img src="/media/icons/Chart256x256.png" alt="Chart"></div>
-          <h3>Check Your Odds</h3>
-          <p>See admission chances</p>
-        </a>
         <a href="/explorer.html" class="tile">
           <div class="tile-icon"><img src="/media/icons/Search256x256.png" alt="Search"></div>
           <h3>Explore Colleges</h3>
           <p>Find your perfect fit</p>
-        </a>
-        <a href="/planner.html" class="tile">
-          <div class="tile-icon"><img src="/media/icons/Calender256x256.png" alt="Calendar"></div>
-          <h3>Plan Your Path</h3>
-          <p>4-year roadmap</p>
         </a>
         <a href="/messages.html" class="tile">
           <div class="tile-icon"><img src="/media/icons/Chat256x256.png" alt="Chat"></div>
           <h3>AI Chat Advisor</h3>
           <p>Get instant guidance</p>
         </a>
-        <a href="/profile.html" class="tile">
-          <div class="tile-icon"><img src="/media/icons/Profile256x256.png" alt="Profile"></div>
-          <h3>My Profile</h3>
-          <p>View & update info</p>
-        </a>
         <a href="/saved.html" class="tile">
           <div class="tile-icon"><img src="/media/icons/Star256x256.png" alt="Star"></div>
           <h3>Saved Colleges</h3>
           <p>Track favorite Colleges</p>
         </a>
+        <a href="/odds.html" class="tile">
+          <div class="tile-icon"><img src="/media/icons/Odds256x256.png" alt="Odds"></div>
+          <h3>Check Your Odds</h3>
+          <p>See admission chances</p>
+        </a>
+        <a href="/career.html" class="tile">
+          <div class="tile-icon"><img src="/media/icons/DollarSign256x256.png" alt="Career"></div>
+          <h3>Career & Salary</h3>
+          <p>Explore career paths</p>
+        </a>
+        <a href="/activities.html" class="tile">
+          <div class="tile-icon"><img src="/media/icons/Activity256x256.png" alt="Activity"></div>
+          <h3>Activity Recs</h3>
+          <p>Get suggestions</p>
+        </a>
+        <a href="/planner.html" class="tile">
+          <div class="tile-icon"><img src="/media/icons/Calender256x256.png" alt="Calendar"></div>
+          <h3>Plan Your Path</h3>
+          <p>4-year roadmap</p>
+        </a>
+        <a href="/simulator.html" class="tile">
+          <div class="tile-icon"><img src="/media/icons/WhatIf256x256.png" alt="What If"></div>
+          <h3>"What If"</h3>
+          <p>Test scenarios</p>
+        </a>
       </section>
+
+      <!-- Privacy Policy Link -->
+      <div style="text-align: center; margin: 1.5rem 0 0.5rem 0;">
+        <a href="https://maximilianising.github.io/PathPal/PRIVACY_POLICY.html" target="_blank" style="color: var(--primary-green); font-size: 0.85rem; font-style: italic; text-decoration: none;">Privacy Policy</a>
+      </div>
 
     </div>
   </main>
@@ -161,7 +210,7 @@
   <!-- Footer -->
   <footer>
     <div class="container">
-      <p>&copy; Path Pal 2025 — v1.08</p>
+      <p>&copy; Path Pal 2025 — v1.09</p>
     </div>
   </footer>
 
@@ -219,6 +268,32 @@
       
       localStorage.setItem('browser-popup-dismissed', 'true');
     }
+
+    // Show blog post modal
+    function showBlogPost() {
+      const modal = document.getElementById('blog-modal');
+      if (modal) {
+        modal.style.display = 'block';
+        document.body.style.overflow = 'hidden';
+      }
+    }
+
+    // Close blog post modal
+    function closeBlogPost() {
+      const modal = document.getElementById('blog-modal');
+      if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = '';
+      }
+    }
+
+    // Close modal when clicking outside
+    document.addEventListener('click', (e) => {
+      const modal = document.getElementById('blog-modal');
+      if (modal && e.target === modal) {
+        closeBlogPost();
+      }
+    });
 
     // Load progress data and check browser mode
     document.addEventListener('DOMContentLoaded', async () => {

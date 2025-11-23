@@ -375,6 +375,24 @@
               <option value="Private For-Profit">Private For-Profit</option>
             </select>
           </div>
+          <div class="form-group">
+            <label>Test Optional</label>
+            <select id="filter-test-optional">
+              <option value="">All</option>
+              <option value="true">Yes</option>
+              <option value="false">No</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Tuition</label>
+            <select id="filter-tuition">
+              <option value="">All</option>
+              <option value="15">Less than $15k</option>
+              <option value="30">Less than $30k</option>
+              <option value="45">Less than $45k</option>
+              <option value="60">Less than $60k</option>
+            </select>
+          </div>
         </div>
         <button class="btn btn-primary" onclick="applyFilters()" style="width: 100%; margin-top: 0.5rem;">
           Apply Filters
@@ -382,6 +400,20 @@
         <button class="btn btn-secondary" onclick="resetFilters()" style="width: 100%; margin-top: 0.5rem;">
           Reset Filters
         </button>
+      </div>
+
+      <!-- Sort By -->
+      <div class="filters" style="margin-top: 1rem;">
+        <div class="form-group">
+          <label>Sort By</label>
+          <select id="sort-by" onchange="applyFilters()">
+            <option value="name">Name (A-Z)</option>
+            <option value="acceptance-high">Acceptance Rate (High to Low)</option>
+            <option value="acceptance-low">Acceptance Rate (Low to High)</option>
+            <option value="enrollment-high">Number of Students (High to Low)</option>
+            <option value="enrollment-low">Number of Students (Low to High)</option>
+          </select>
+        </div>
       </div>
 
       <!-- College List -->
@@ -396,7 +428,7 @@
 
   <footer>
     <div class="container">
-      <p>&copy; Path Pal 2025 — v1.08</p>
+      <p>&copy; Path Pal 2025 — v1.09</p>
     </div>
   </footer>
 
@@ -532,7 +564,7 @@
         const data = await response.json();
         
         allColleges = data.results || [];
-        filteredColleges = [...allColleges];
+        filteredColleges = sortColleges([...allColleges]);
         
         displayColleges();
       } catch (error) {
@@ -618,12 +650,71 @@
       }, 300);
     }
 
+    function sortColleges(colleges) {
+      const sortBy = document.getElementById('sort-by').value;
+      
+      return [...colleges].sort((a, b) => {
+        switch (sortBy) {
+          case 'name':
+            // Sort alphabetically by name
+            const nameA = (a.name || '').toLowerCase();
+            const nameB = (b.name || '').toLowerCase();
+            return nameA.localeCompare(nameB);
+          
+          case 'acceptance-high':
+            // Sort by acceptance rate: high to low
+            const rateA = a.acceptanceRate !== null && a.acceptanceRate !== undefined ? a.acceptanceRate : -1;
+            const rateB = b.acceptanceRate !== null && b.acceptanceRate !== undefined ? b.acceptanceRate : -1;
+            // Put null values at the end
+            if (rateA === -1 && rateB === -1) return 0;
+            if (rateA === -1) return 1;
+            if (rateB === -1) return -1;
+            return rateB - rateA; // High to low
+          
+          case 'acceptance-low':
+            // Sort by acceptance rate: low to high
+            const rateALow = a.acceptanceRate !== null && a.acceptanceRate !== undefined ? a.acceptanceRate : 999;
+            const rateBLow = b.acceptanceRate !== null && b.acceptanceRate !== undefined ? b.acceptanceRate : 999;
+            // Put null values at the end
+            if (rateALow === 999 && rateBLow === 999) return 0;
+            if (rateALow === 999) return 1;
+            if (rateBLow === 999) return -1;
+            return rateALow - rateBLow; // Low to high
+          
+          case 'enrollment-high':
+            // Sort by enrollment: high to low
+            const enrollA = a.enrollment !== null && a.enrollment !== undefined ? a.enrollment : -1;
+            const enrollB = b.enrollment !== null && b.enrollment !== undefined ? b.enrollment : -1;
+            // Put null values at the end
+            if (enrollA === -1 && enrollB === -1) return 0;
+            if (enrollA === -1) return 1;
+            if (enrollB === -1) return -1;
+            return enrollB - enrollA; // High to low
+          
+          case 'enrollment-low':
+            // Sort by enrollment: low to high
+            const enrollALow = a.enrollment !== null && a.enrollment !== undefined ? a.enrollment : 999999;
+            const enrollBLow = b.enrollment !== null && b.enrollment !== undefined ? b.enrollment : 999999;
+            // Put null values at the end
+            if (enrollALow === 999999 && enrollBLow === 999999) return 0;
+            if (enrollALow === 999999) return 1;
+            if (enrollBLow === 999999) return -1;
+            return enrollALow - enrollBLow; // Low to high
+          
+          default:
+            return 0;
+        }
+      });
+    }
+
     function applyFilters() {
       const searchTerm = document.getElementById('search-input').value.toLowerCase().trim();
       const chanceFilter = document.getElementById('filter-chance').value;
       const regionFilter = document.getElementById('filter-region').value;
       const sizeFilter = document.getElementById('filter-size').value;
       const typeFilter = document.getElementById('filter-type').value;
+      const testOptionalFilter = document.getElementById('filter-test-optional').value;
+      const tuitionFilter = document.getElementById('filter-tuition').value;
 
       filteredColleges = allColleges.filter(college => {
         // Search filter with abbreviations and fuzzy matching
@@ -653,8 +744,27 @@
         // Type filter
         if (typeFilter && college.type !== typeFilter) return false;
 
+        // Test Optional filter
+        if (testOptionalFilter) {
+          const isTestOptional = college.testOptional === true || college.testOptional === 'true' || college.testOptional === 1;
+          const filterValue = testOptionalFilter === 'true';
+          if (isTestOptional !== filterValue) return false;
+        }
+
+        // Tuition filter (based on out-of-state tuition)
+        if (tuitionFilter) {
+          const maxTuition = parseInt(tuitionFilter) * 1000; // Convert to dollars (15k = 15000)
+          const outOfStateTuition = college.tuitionOutState;
+          if (outOfStateTuition === null || outOfStateTuition === undefined || outOfStateTuition >= maxTuition) {
+            return false;
+          }
+        }
+
         return true;
       });
+
+      // Sort the filtered colleges
+      filteredColleges = sortColleges(filteredColleges);
 
       currentPage = 1;
       displayColleges();
@@ -666,7 +776,10 @@
       document.getElementById('filter-region').value = '';
       document.getElementById('filter-size').value = '';
       document.getElementById('filter-type').value = '';
-      filteredColleges = [...allColleges];
+      document.getElementById('filter-test-optional').value = '';
+      document.getElementById('filter-tuition').value = '';
+      document.getElementById('sort-by').value = 'name';
+      filteredColleges = sortColleges([...allColleges]);
       currentPage = 1;
       displayColleges();
     }

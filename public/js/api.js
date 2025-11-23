@@ -5,10 +5,12 @@ const API_BASE = '';
 // GPT Chat API
 async function sendChatMessage(message, context = []) {
   try {
+    const userId = getUserId();
     const response = await fetch(`${API_BASE}/api/chat`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'user-id': userId
       },
       body: JSON.stringify({ message, context })
     });

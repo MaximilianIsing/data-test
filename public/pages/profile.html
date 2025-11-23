@@ -241,7 +241,7 @@
             <option value="10">10</option>
           </select>
           <small style="display:block; margin-top:0.25rem; color: var(--text-light);">
-            Report up to 10 key activities. Approximate total hours per year for each.
+            Report up to 10 key activities. Select frequency for each.
           </small>
         </div>
 
@@ -263,7 +263,7 @@
 
   <footer>
     <div class="container">
-      <p>&copy; 2025 Path Pal. v1.08</p>
+      <p>&copy; 2025 Path Pal. v1.09</p>
     </div>
   </footer>
 
@@ -557,21 +557,29 @@
       if (n > 0) {
         // Header row shown once at the top
         html += '<div class="form-row" style="display: flex; justify-content: flex-start; align-items: center; margin-bottom: 0.25rem; font-size: 0.8rem; color: var(--text-dark); font-weight: 600;">';
-        html += '<div style="flex: 0 0 80px; max-width: 80px; margin-right: 0.25rem; text-align: center; white-space: nowrap;">Hours / yr</div>';
+        html += '<div style="flex: 0 0 80px; max-width: 80px; margin-right: 0.25rem; text-align: center; white-space: nowrap;">Frequency</div>';
         html += '<div style="flex: 1; margin-left: 0.25rem; text-align: center;">Activity</div>';
         html += '</div>';
       }
 
       for (let i = 0; i < n; i++) {
         const row = existing[i] || {};
-        const hours = row.hours || '';
+        // hours field now stores frequency value directly
+        const frequency = row.hours || '';
         const desc = row.description || '';
 
         html += '<div class="form-row" style="margin-bottom: 0.05rem; display: flex; align-items: center; justify-content: flex-start;">';
 
-        // Hours per year (left - narrow)
+        // Frequency dropdown (left)
         html += '<div class="form-group" style="flex: 0 0 80px; max-width: 80px; margin-right: 0.25rem;">';
-        html += `<input type="number" id="activity-hours-${i}" min="0" max="2000" style="width: 100%; text-align: center;" placeholder="#${i + 1}" value="${hours}">`;
+        html += `<select id="activity-hours-${i}" style="width: 100%; font-size: 0.75rem;">`;
+        html += '<option value="">...</option>';
+        html += '<option value="daily" ' + (frequency === 'daily' ? 'selected' : '') + '>Daily</option>';
+        html += '<option value="several-times-week" ' + (frequency === 'several-times-week' ? 'selected' : '') + '>Several/wk</option>';
+        html += '<option value="weekly" ' + (frequency === 'weekly' ? 'selected' : '') + '>Weekly</option>';
+        html += '<option value="monthly" ' + (frequency === 'monthly' ? 'selected' : '') + '>Monthly</option>';
+        html += '<option value="rarely" ' + (frequency === 'rarely' ? 'selected' : '') + '>Rarely</option>';
+        html += '</select>';
         html += '</div>';
 
         // Activity description (right - wide)
@@ -802,24 +810,46 @@
         const activitiesCountSelectInit = document.getElementById('activities-count');
         let activities = [];
         
+        // Helper function to convert legacy hours to frequency (or keep frequency if already a frequency value)
+        const normalizeFrequency = (hours) => {
+          if (!hours) return '';
+          // If it's already a frequency value, return it
+          if (['daily', 'several-times-week', 'weekly', 'monthly', 'rarely'].includes(hours)) {
+            return hours;
+          }
+          // Convert numeric hours to frequency
+          const hrs = parseInt(hours) || 0;
+          if (hrs >= 500) return 'daily';
+          if (hrs >= 200) return 'several-times-week';
+          if (hrs >= 50) return 'weekly';
+          if (hrs >= 10) return 'monthly';
+          return 'rarely';
+        };
+        
         if (profile.activities) {
           // If it's already an array, use it directly
           if (Array.isArray(profile.activities)) {
-            activities = profile.activities;
+            activities = profile.activities.map(act => ({
+              hours: normalizeFrequency(act.hours),
+              description: act.description || ''
+            }));
           } 
           // If it's a string, try to parse as JSON first
           else if (typeof profile.activities === 'string') {
             try {
               const parsed = JSON.parse(profile.activities);
               if (Array.isArray(parsed)) {
-                activities = parsed;
+                activities = parsed.map(act => ({
+                  hours: normalizeFrequency(act.hours),
+                  description: act.description || ''
+                }));
               } else {
                 // Legacy string format: "X hrs — description" per line
                 const lines = profile.activities.split('\n').map(l => l.trim()).filter(Boolean);
                 activities = lines.slice(0, 10).map(line => {
                   const match = line.match(/^(\d+)\s*(hrs?|hours?|h)?\s*[-–:]\s*(.+)$/i);
                   if (match) {
-                    return { hours: match[1], description: match[3] };
+                    return { hours: normalizeFrequency(match[1]), description: match[3] };
                   }
                   return { hours: '', description: line };
                 });
@@ -830,7 +860,7 @@
               activities = lines.slice(0, 10).map(line => {
                 const match = line.match(/^(\d+)\s*(hrs?|hours?|h)?\s*[-–:]\s*(.+)$/i);
                 if (match) {
-                  return { hours: match[1], description: match[3] };
+                  return { hours: normalizeFrequency(match[1]), description: match[3] };
                 }
                 return { hours: '', description: line };
               });
@@ -898,13 +928,14 @@
             // Check for existing activity inputs (up to 10)
             const currentActivities = [];
             for (let i = 0; i < 10; i++) {
-              const hoursEl = document.getElementById(`activity-hours-${i}`);
+              const frequencyEl = document.getElementById(`activity-hours-${i}`);
               const descEl = document.getElementById(`activity-desc-${i}`);
-              if (hoursEl || descEl) {
-                // Element exists, get its value
-                const hours = hoursEl ? (hoursEl.value || '').trim() : '';
+              if (frequencyEl || descEl) {
+                // Element exists, get its value (frequency is stored directly)
+                const frequency = frequencyEl ? frequencyEl.value : '';
                 const desc = descEl ? (descEl.value || '').trim() : '';
-                currentActivities.push({ hours: hours, description: desc });
+                // Store frequency value directly in hours field
+                currentActivities.push({ hours: frequency, description: desc });
               } else {
                 // Element doesn't exist yet, add empty entry
                 currentActivities.push({ hours: '', description: '' });
@@ -1052,12 +1083,13 @@
         const activitiesArr = [];
         const activitiesCountVal = document.getElementById('activities-count') ? parseInt(document.getElementById('activities-count').value, 10) || 0 : 0;
         for (let i = 0; i < activitiesCountVal && i < 10; i++) {
-          const hoursEl = document.getElementById(`activity-hours-${i}`);
+          const frequencyEl = document.getElementById(`activity-hours-${i}`);
           const descEl = document.getElementById(`activity-desc-${i}`);
-          const hours = hoursEl ? (hoursEl.value || '').trim() : '';
+          const frequency = frequencyEl ? frequencyEl.value : '';
           const desc = descEl ? (descEl.value || '').trim() : '';
           if (desc) {
-            activitiesArr.push({ hours: hours, description: desc });
+            // Store frequency value directly (not converting to hours)
+            activitiesArr.push({ hours: frequency, description: desc });
           }
         }
 
@@ -1124,6 +1156,45 @@
       signOut();
       window.location.href = '/pages/login.html';
     }
+
+    // Auto-save profile when navigating to different tabs
+    document.addEventListener('DOMContentLoaded', () => {
+      // Intercept all navigation link clicks
+      const navLinks = document.querySelectorAll('nav a[href^="/"]');
+      navLinks.forEach(link => {
+        // Skip the current page (profile.html), sign out, and external links
+        const href = link.getAttribute('href');
+        if (href.includes('/profile.html') || link.onclick || href.startsWith('http')) {
+          return;
+        }
+        
+        link.addEventListener('click', async (e) => {
+          e.preventDefault();
+          const targetUrl = href;
+          
+          // Save profile before navigating
+          try {
+            await saveProfile();
+          } catch (error) {
+            console.error('Error auto-saving profile:', error);
+          }
+          
+          // Navigate after save completes
+          window.location.href = targetUrl;
+        });
+      });
+
+      // Also save on visibility change (when tab becomes hidden)
+      document.addEventListener('visibilitychange', async () => {
+        if (document.hidden) {
+          try {
+            await saveProfile();
+          } catch (error) {
+            console.error('Error auto-saving profile on visibility change:', error);
+          }
+        }
+      });
+    });
   </script>
 </body>
 </html>

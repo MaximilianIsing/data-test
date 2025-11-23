@@ -115,6 +115,16 @@ async function sendEmail(to, subject, html, text = null) {
 app.post('/api/chat', async (req, res) => {
   try {
     const { message, context } = req.body;
+    const userId = req.headers['user-id'] || 'anonymous';
+    const timestamp = new Date().toISOString();
+    
+    // Log incoming message from user
+    try {
+      const logEntry = `${escapeCSV(timestamp)},${escapeCSV(userId)},received,${escapeCSV(message)}\n`;
+      fs.appendFileSync(COUNSELOR_CSV_PATH, logEntry, 'utf8');
+    } catch (logError) {
+      console.error('Error logging incoming message:', logError);
+    }
     
     if (!GPT_API_KEY) {
       return res.status(500).json({ error: 'GPT API key not configured' });
@@ -150,8 +160,18 @@ app.post('/api/chat', async (req, res) => {
       return res.status(response.status).json({ error: data.error?.message || 'API error' });
     }
 
+    const aiMessage = data.choices[0].message.content;
+    
+    // Log outgoing message from AI
+    try {
+      const logEntry = `${escapeCSV(timestamp)},${escapeCSV(userId)},sent,${escapeCSV(aiMessage)}\n`;
+      fs.appendFileSync(COUNSELOR_CSV_PATH, logEntry, 'utf8');
+    } catch (logError) {
+      console.error('Error logging outgoing message:', logError);
+    }
+
     res.json({ 
-      message: data.choices[0].message.content,
+      message: aiMessage,
       usage: data.usage
     });
   } catch (error) {
@@ -389,6 +409,8 @@ const ACCOUNTS_CSV_PATH = path.join(__dirname, 'storage', 'accounts.csv');
 const LOGINS_CSV_PATH = path.join(__dirname, 'storage', 'logins.csv');
 // Profile pictures CSV file path
 const PROFILE_PICTURES_CSV_PATH = path.join(__dirname, 'storage', 'profile_pictures.csv');
+// Counselor messages CSV file path
+const COUNSELOR_CSV_PATH = path.join(__dirname, 'storage', 'counselor.csv');
 
 // Ensure storage directory exists
 const storageDir = path.join(__dirname, 'storage');
@@ -412,6 +434,12 @@ if (!fs.existsSync(LOGINS_CSV_PATH)) {
 if (!fs.existsSync(PROFILE_PICTURES_CSV_PATH)) {
   const header = 'user_id,profile_picture_base64,updated_at\n';
   fs.writeFileSync(PROFILE_PICTURES_CSV_PATH, header, 'utf8');
+}
+
+// Initialize counselor messages CSV if it doesn't exist
+if (!fs.existsSync(COUNSELOR_CSV_PATH)) {
+  const header = 'timestamp,user_id,direction,message\n';
+  fs.writeFileSync(COUNSELOR_CSV_PATH, header, 'utf8');
 }
 
 // Helper function to escape CSV values
