@@ -10,9 +10,13 @@ from flask import Flask
 from scraper_service import (
     SCANNED_CSV,
     INPUT_CSV,
+    DATA_DIR,
     main as scraper_main,
     log,
 )
+
+# Ensure data directory exists
+os.makedirs(DATA_DIR, exist_ok=True)
 
 # Import init function
 from init_scanned import init_scanned_csv
@@ -21,6 +25,21 @@ from api_server import app as api_app, get_endpoint_key
 
 def check_and_init():
     """Check if scanned.csv exists and has data, initialize if needed."""
+    # Copy university_data.csv to data directory if it doesn't exist there
+    # Try multiple possible locations in repo
+    possible_repo_csvs = ["university_data.csv", "data/university_data.csv"]
+    repo_csv = None
+    for path in possible_repo_csvs:
+        if os.path.exists(path):
+            repo_csv = path
+            break
+    
+    if repo_csv and not os.path.exists(INPUT_CSV):
+        log(f"Copying {repo_csv} to {INPUT_CSV}...")
+        import shutil
+        shutil.copy2(repo_csv, INPUT_CSV)
+        log(f"Copied {repo_csv} to {INPUT_CSV}")
+    
     if not os.path.exists(SCANNED_CSV):
         log(f"{SCANNED_CSV} not found, initializing...")
         init_scanned_csv()

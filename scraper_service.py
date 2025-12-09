@@ -23,12 +23,28 @@ from rapidfuzz import fuzz
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
 
 
-SCANNED_CSV = "scanned.csv"
-INPUT_CSV = "university_data.csv"
-PROGRESS_JSON = "scraper_progress.json"
-SLUG_CACHE = "slug_cache.json"
-LOG_PATH = "scraper.log"
-URL_MISSES_LOG = "slug_misses.log"
+# Data directory for persistent storage (mounted Render Disk)
+# Use /data on Render (Linux), or local "data" directory for development (Windows)
+import sys
+if sys.platform == "win32":
+    # On Windows, always use local "data" directory
+    DATA_DIR = "data"
+elif os.path.exists("/data") and os.access("/data", os.W_OK):
+    # On Linux/Render, use /data if it exists and is writable
+    DATA_DIR = "/data"
+else:
+    # Fallback to local "data" directory
+    DATA_DIR = "data"
+
+# Ensure data directory exists
+os.makedirs(DATA_DIR, exist_ok=True)
+
+SCANNED_CSV = os.path.join(DATA_DIR, "scanned.csv")
+INPUT_CSV = os.path.join(DATA_DIR, "university_data.csv")
+PROGRESS_JSON = os.path.join(DATA_DIR, "scraper_progress.json")
+SLUG_CACHE = os.path.join(DATA_DIR, "slug_cache.json")
+LOG_PATH = os.path.join(DATA_DIR, "scraper.log")
+URL_MISSES_LOG = os.path.join(DATA_DIR, "slug_misses.log")
 SLEEP_BETWEEN_COLLEGES = 15  # seconds
 
 

@@ -14,11 +14,15 @@ from typing import Optional
 from scraper_service import (
     SCANNED_CSV,
     INPUT_CSV,
+    DATA_DIR,
     compute_college_score,
     get_scanned_csv_fields,
     parse_int,
     parse_ratio,
 )
+
+# Ensure data directory exists
+os.makedirs(DATA_DIR, exist_ok=True)
 
 
 def parse_percent(val):
