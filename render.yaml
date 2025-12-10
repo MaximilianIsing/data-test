@@ -1,11 +1,12 @@
 services:
   - type: web
     name: college-scraper
-    env: python
-    buildCommand: pip install -r requirements.txt && playwright install chromium
+    runtime: python
+    plan: free
+    buildCommand: python -m pip install --upgrade pip && pip install -r requirements.txt && playwright install chromium
     startCommand: python server.py
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.0
-    # The Flask API runs on port 5000
+        value: 3.11.5
+    # The Flask API runs on port from PORT env var
     # Render will automatically expose this as a public URL
