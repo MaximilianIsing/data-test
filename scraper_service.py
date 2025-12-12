@@ -10,17 +10,23 @@ Run (Linux-friendly):
 """
 
 import csv
+import gc
 import json
 import os
 import re
 import time
 from contextlib import suppress
+from collections import OrderedDict
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from rapidfuzz import fuzz
-from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
+from playwright.sync_api import (
+    TimeoutError as PlaywrightTimeoutError,
+    Error as PlaywrightError,
+    sync_playwright,
+)
 
 
 # Data directory for persistent storage (mounted Render Disk)
@@ -46,6 +52,8 @@ SLUG_CACHE = os.path.join(DATA_DIR, "slug_cache.json")
 LOG_PATH = os.path.join(DATA_DIR, "scraper.log")
 URL_MISSES_LOG = os.path.join(DATA_DIR, "slug_misses.log")
 SLEEP_BETWEEN_COLLEGES = 15  # seconds
+MAX_SLUG_CACHE_SIZE = 5000  # Limit cache size to prevent memory issues
+PAGE_RECYCLE_INTERVAL = 50  # Recreate page every N colleges to prevent memory leaks
 
 
 XPATHS = {
@@ -105,20 +113,60 @@ def load_progress() -> int:
 
 
 def save_progress(idx: int) -> None:
-    with open(PROGRESS_JSON, "w", encoding="utf-8") as f:
-        json.dump({"index": idx}, f)
+    """Save progress with error handling to prevent crashes."""
+    try:
+        tmp_path = PROGRESS_JSON + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump({"index": idx}, f)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, PROGRESS_JSON)
+    except Exception as e:
+        log(f"Warning: Failed to save progress: {e}")
+        # Don't crash - progress will be saved next time
 
 
-def load_slug_cache() -> Dict[str, str]:
+def load_slug_cache() -> OrderedDict:
+    """Load slug cache as OrderedDict for LRU eviction."""
     if not os.path.exists(SLUG_CACHE):
-        return {}
+        return OrderedDict()
     with open(SLUG_CACHE, "r", encoding="utf-8") as f:
-        return json.load(f)
+        data = json.load(f)
+        # Convert to OrderedDict (preserve insertion order for LRU)
+        return OrderedDict(data)
 
 
-def save_slug_cache(cache: Dict[str, str]) -> None:
-    with open(SLUG_CACHE, "w", encoding="utf-8") as f:
-        json.dump(cache, f, indent=2)
+def save_slug_cache(cache: OrderedDict) -> None:
+    """Save slug cache, limiting size to prevent memory issues."""
+    try:
+        # Convert OrderedDict to regular dict for JSON serialization
+        # Only keep the most recent entries if cache is too large
+        cache_copy = cache
+        if len(cache_copy) > MAX_SLUG_CACHE_SIZE:
+            # Keep only the most recent entries (LRU eviction)
+            cache_copy = OrderedDict(list(cache_copy.items())[-MAX_SLUG_CACHE_SIZE:])
+        
+        tmp_path = SLUG_CACHE + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(dict(cache_copy), f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, SLUG_CACHE)
+    except Exception as e:
+        log(f"Warning: Failed to save slug cache: {e}")
+        # Don't crash - cache will be saved next time
+
+
+def add_to_cache(cache: OrderedDict, key: str, value: str) -> None:
+    """Add entry to cache with LRU eviction."""
+    # Remove if exists (to move to end)
+    if key in cache:
+        del cache[key]
+    # Add to end (most recent)
+    cache[key] = value
+    # Evict oldest if over limit
+    if len(cache) > MAX_SLUG_CACHE_SIZE:
+        cache.popitem(last=False)
 
 
 def normalize_name(name: str) -> str:
@@ -137,12 +185,22 @@ def slugify_name(name: str) -> str:
 
 
 def read_colleges(path: str) -> List[dict]:
+    """Read colleges from CSV with error handling."""
     colleges = []
-    with open(path, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            colleges.append(row)
-    return colleges
+    try:
+        with open(path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                colleges.append(row)
+        if not colleges:
+            log(f"Warning: No colleges found in {path}")
+        return colleges
+    except FileNotFoundError:
+        log(f"Error: {path} not found")
+        raise
+    except Exception as e:
+        log(f"Error reading {path}: {e}")
+        raise
 
 
 def clean_text(text: str) -> str:
@@ -155,8 +213,12 @@ def clean_text(text: str) -> str:
 
 
 def get_text(page, xpath: str) -> str:
+    """Get text from page element, clearing locator reference after use."""
     with suppress(PlaywrightTimeoutError):
-        raw = page.locator(f"xpath={xpath}").inner_text(timeout=7000)
+        locator = page.locator(f"xpath={xpath}")
+        raw = locator.inner_text(timeout=7000)
+        # Clear locator reference
+        del locator
         return clean_text(raw)
     return ""
 
@@ -299,35 +361,52 @@ def swap_college_university(name: str) -> str:
     return name
 
 
-def resolve_url(page, name: str, slug_cache: Dict[str, str]) -> Tuple[Optional[str], Optional[str]]:
+def resolve_url(page, name: str, slug_cache: OrderedDict) -> Tuple[Optional[str], Optional[str]]:
     """Resolve URL and return (url, actual_name_used). Returns (None, None) if not found."""
     key = name.lower()
     if key in slug_cache:
-        url = slug_cache[key]
-        # Try to extract name from URL or use original
-        # Since cached, we assume original name was used unless we track it separately
-        return url, name
+        try:
+            url = slug_cache[key]
+            # Move to end (most recently used)
+            add_to_cache(slug_cache, key, url)
+            # Ensure URL is lowercased
+            url = url.lower()
+            # Try to extract name from URL or use original
+            # Since cached, we assume original name was used unless we track it separately
+            return url, name
+        except Exception as e:
+            log(f"Warning: Error accessing cache for {name}: {e}")
+            # Continue to try fetching URL normally
 
     # Try direct slug with original name
     slug = slugify_name(name)
-    direct = f"https://bigfuture.collegeboard.org/colleges/{slug}"
+    direct = f"https://bigfuture.collegeboard.org/colleges/{slug}".lower()
     try:
         page.goto(direct, wait_until="domcontentloaded", timeout=12000)
-        if "bigfuture.collegeboard.org/colleges/" in page.url and page.locator("main").is_visible():
+        main_locator = page.locator("main")
+        is_visible = main_locator.is_visible()
+        del main_locator  # Clear reference
+        
+        if "bigfuture.collegeboard.org/colleges/" in page.url.lower() and is_visible:
             # Extract actual name from page
             actual_name = name
             try:
                 # Try to get name from h1 on the page
-                h1 = page.locator("h1").first
-                if h1.is_visible(timeout=2000):
-                    actual_name = h1.inner_text().strip()
-            except PlaywrightTimeoutError:
+                h1_locator = page.locator("h1").first
+                if h1_locator.is_visible(timeout=2000):
+                    actual_name = h1_locator.inner_text().strip()
+                del h1_locator  # Clear reference
+            except (PlaywrightTimeoutError, PlaywrightError):
                 pass
-            slug_cache[key] = page.url
+            # Store lowercased URL in cache
+            url_lower = page.url.lower()
+            add_to_cache(slug_cache, key, url_lower)
             save_slug_cache(slug_cache)
-            return page.url, actual_name
-    except PlaywrightTimeoutError:
-        pass
+            return url_lower, actual_name
+    except (PlaywrightTimeoutError, PlaywrightError) as e:
+        log(f"Warning: Network error accessing {direct} for {name}: {e}")
+    except Exception as e:
+        log(f"Warning: Unexpected error resolving URL for {name}: {e}")
 
     # Fallback: search flow with original name
     try:
@@ -339,47 +418,68 @@ def resolve_url(page, name: str, slug_cache: Dict[str, str]) -> Tuple[Optional[s
         links = page.locator("a[href*='/colleges/']").all()
         results = []
         for link in links[:10]:
-            href = link.get_attribute("href") or ""
-            label = link.inner_text().strip()
-            if "/colleges/" in href:
-                results.append((href if href.startswith("http") else f"https://bigfuture.collegeboard.org{href}", label))
+            try:
+                href = link.get_attribute("href") or ""
+                label = link.inner_text().strip()
+                if "/colleges/" in href:
+                    full_url = (href if href.startswith("http") else f"https://bigfuture.collegeboard.org{href}").lower()
+                    results.append((full_url, label))
+            except Exception as e:
+                log(f"Warning: Error extracting link for {name}: {e}")
+                continue
+        del links  # Clear references
         chosen = best_result_by_name(results, name)
         if chosen:
+            # Ensure chosen URL is lowercased
+            chosen = chosen.lower()
             # Extract the actual name from the best match result
             actual_name = name
             for href, label in results:
-                if href == chosen:
+                if href.lower() == chosen:
                     actual_name = label
                     break
-            slug_cache[key] = chosen
+            del results  # Clear references
+            add_to_cache(slug_cache, key, chosen)
             save_slug_cache(slug_cache)
             return chosen, actual_name
-    except PlaywrightTimeoutError:
-        pass
+        del results  # Clear references
+    except (PlaywrightTimeoutError, PlaywrightError) as e:
+        log(f"Warning: Search error for {name}: {e}")
+    except Exception as e:
+        log(f"Warning: Unexpected error in search for {name}: {e}")
 
     # Retry with swapped college/university
     swapped_name = swap_college_university(name)
     if swapped_name != name:
         # Try direct slug with swapped name
         slug_swapped = slugify_name(swapped_name)
-        direct_swapped = f"https://bigfuture.collegeboard.org/colleges/{slug_swapped}"
+        direct_swapped = f"https://bigfuture.collegeboard.org/colleges/{slug_swapped}".lower()
         try:
             page.goto(direct_swapped, wait_until="domcontentloaded", timeout=12000)
-            if "bigfuture.collegeboard.org/colleges/" in page.url and page.locator("main").is_visible():
+            main_locator = page.locator("main")
+            is_visible = main_locator.is_visible()
+            del main_locator  # Clear reference
+            
+            if "bigfuture.collegeboard.org/colleges/" in page.url.lower() and is_visible:
                 # Extract actual name from page
                 actual_name = swapped_name
                 try:
                     # Try to get name from h1 on the page
-                    h1 = page.locator("h1").first
-                    if h1.is_visible(timeout=2000):
-                        actual_name = h1.inner_text().strip()
-                except PlaywrightTimeoutError:
+                    h1_locator = page.locator("h1").first
+                    if h1_locator.is_visible(timeout=2000):
+                        actual_name = h1_locator.inner_text().strip()
+                    del h1_locator  # Clear reference
+                except (PlaywrightTimeoutError, PlaywrightError):
                     pass
-                slug_cache[key] = page.url
+                # Store lowercased URL in cache
+                url_lower = page.url.lower()
+                add_to_cache(slug_cache, key, url_lower)
                 save_slug_cache(slug_cache)
-                return page.url, actual_name
-        except PlaywrightTimeoutError:
-            pass
+                return url_lower, actual_name
+        except (PlaywrightTimeoutError, PlaywrightError) as e:
+            log(f"Warning: Network error accessing swapped URL {direct_swapped} for {name}: {e}")
+        except Exception as e:
+            log(f"Warning: Unexpected error in swapped URL resolution for {name}: {e}")
 
         # Try search with swapped name
         try:
@@ -391,30 +491,53 @@ def resolve_url(page, name: str, slug_cache: Dict[str, str]) -> Tuple[Optional[s
             links = page.locator("a[href*='/colleges/']").all()
             results = []
             for link in links[:10]:
-                href = link.get_attribute("href") or ""
-                label = link.inner_text().strip()
-                if "/colleges/" in href:
-                    results.append((href if href.startswith("http") else f"https://bigfuture.collegeboard.org{href}", label))
+                try:
+                    href = link.get_attribute("href") or ""
+                    label = link.inner_text().strip()
+                    if "/colleges/" in href:
+                        full_url = (href if href.startswith("http") else f"https://bigfuture.collegeboard.org{href}").lower()
+                        results.append((full_url, label))
+                except Exception as e:
+                    log(f"Warning: Error extracting swapped link for {name}: {e}")
+                    continue
+            del links  # Clear references
             chosen = best_result_by_name(results, name)
             if chosen:
-                slug_cache[key] = chosen
+                # Ensure chosen URL is lowercased
+                chosen = chosen.lower()
+                add_to_cache(slug_cache, key, chosen)
                 save_slug_cache(slug_cache)
                 # Extract the actual name from the best match result
                 actual_name = swapped_name
                 for href, label in results:
-                    if href == chosen:
+                    if href.lower() == chosen:
                         actual_name = label
                         break
+                del results  # Clear references
                 return chosen, actual_name
-        except PlaywrightTimeoutError:
-            pass
+            del results  # Clear references
+        except (PlaywrightTimeoutError, PlaywrightError) as e:
+            log(f"Warning: Search error for swapped name {swapped_name}: {e}")
+        except Exception as e:
+            log(f"Warning: Unexpected error in swapped search for {name}: {e}")
 
     return None, None
 
 
 def scrape_one(page, url: str) -> Dict[str, str]:
+    """Scrape one college, using lightweight wait strategy to reduce memory usage."""
     data = {}
-    page.goto(url, wait_until="networkidle", timeout=20000)
+    try:
+        # Use domcontentloaded instead of networkidle to reduce memory pressure
+        page.goto(url, wait_until="domcontentloaded", timeout=20000)
+        # Small wait for dynamic content to load
+        page.wait_for_timeout(1000)
+    except (PlaywrightTimeoutError, PlaywrightError) as e:
+        log(f"Warning: Failed to load page {url}: {e}")
+        raise
+    except Exception as e:
+        log(f"Warning: Unexpected error loading page {url}: {e}")
+        raise
 
     # Overview
     data["college_type"] = get_text(page, XPATHS["college_type"])
@@ -423,8 +546,16 @@ def scrape_one(page, url: str) -> Dict[str, str]:
     data["college_board_code"] = get_text(page, XPATHS["college_board_code"])
 
     # Admissions
-    page.locator(f"xpath={XPATHS['tab_admissions']}").click(timeout=7000)
-    page.wait_for_timeout(1200)
+    try:
+        tab_adm = page.locator(f"xpath={XPATHS['tab_admissions']}")
+        tab_adm.click(timeout=7000)
+        del tab_adm
+        page.wait_for_timeout(800)  # Reduced wait time
+    except (PlaywrightTimeoutError, PlaywrightError) as e:
+        log(f"Warning: Failed to click admissions tab for {url}: {e}")
+    except Exception as e:
+        log(f"Warning: Unexpected error clicking admissions tab for {url}: {e}")
+    
     data["acceptance_rate"] = get_text(page, XPATHS["acceptance_rate"])
     data["sat_range"] = get_text_fallback(
         page,
@@ -441,25 +572,55 @@ def scrape_one(page, url: str) -> Dict[str, str]:
     data["gpa_optional"] = get_text(page, XPATHS["gpa_optional"])
 
     # Academics
-    page.locator(f"xpath={XPATHS['tab_academics']}").click(timeout=7000)
-    page.wait_for_timeout(800)
+    try:
+        tab_acad = page.locator(f"xpath={XPATHS['tab_academics']}")
+        tab_acad.click(timeout=7000)
+        del tab_acad
+        page.wait_for_timeout(600)  # Reduced wait time
+    except (PlaywrightTimeoutError, PlaywrightError) as e:
+        log(f"Warning: Failed to click academics tab for {url}: {e}")
+    except Exception as e:
+        log(f"Warning: Unexpected error clicking academics tab for {url}: {e}")
+    
     data["num_majors"] = get_text(page, XPATHS["num_majors"])
     data["student_faculty_ratio"] = get_text(page, XPATHS["student_faculty_ratio"])
     data["retention_rate"] = get_text(page, XPATHS["retention_rate"])
 
     # Costs
-    page.locator(f"xpath={XPATHS['tab_costs']}").click(timeout=7000)
-    page.wait_for_timeout(800)
+    try:
+        tab_costs = page.locator(f"xpath={XPATHS['tab_costs']}")
+        tab_costs.click(timeout=7000)
+        del tab_costs
+        page.wait_for_timeout(600)  # Reduced wait time
+    except (PlaywrightTimeoutError, PlaywrightError) as e:
+        log(f"Warning: Failed to click costs tab for {url}: {e}")
+    except Exception as e:
+        log(f"Warning: Unexpected error clicking costs tab for {url}: {e}")
+    
     data["pct_receiving_aid"] = get_text(page, XPATHS["pct_receiving_aid"])
     data["avg_after_aid_costs"] = get_text(page, XPATHS["avg_after_aid_costs"])
     data["avg_aid_package"] = get_text(page, XPATHS["avg_aid_package"])
 
     # Campus Life
-    page.locator(f"xpath={XPATHS['tab_campus']}").click(timeout=7000)
-    page.wait_for_timeout(800)
+    try:
+        tab_campus = page.locator(f"xpath={XPATHS['tab_campus']}")
+        tab_campus.click(timeout=7000)
+        del tab_campus
+        page.wait_for_timeout(600)  # Reduced wait time
+    except (PlaywrightTimeoutError, PlaywrightError) as e:
+        log(f"Warning: Failed to click campus tab for {url}: {e}")
+    except Exception as e:
+        log(f"Warning: Unexpected error clicking campus tab for {url}: {e}")
+    
     data["setting"] = get_text(page, XPATHS["setting"])
     data["undergrad_students"] = get_text(page, XPATHS["undergrad_students"])
     data["avg_housing_cost"] = get_text(page, XPATHS["avg_housing_cost"])
+    
+    # Clear page state to reduce memory usage
+    try:
+        page.evaluate("() => { if (window.gc) window.gc(); }")
+    except Exception:
+        pass
 
     # Derived fields
     # College type split
@@ -551,6 +712,7 @@ def get_scanned_csv_fields() -> List[str]:
 
 
 def upsert_csv(name: str, fields: Dict[str, str], csv_path: str = SCANNED_CSV, original_name: Optional[str] = None) -> None:
+    """Upsert CSV row with error handling to prevent crashes."""
     """Upsert CSV row. If original_name is provided, use it to find the row, then update name."""
     # Keep only cleaned/refined fields (no raw text money/percent/range strings)
     ordered_fields = get_scanned_csv_fields()
@@ -561,27 +723,35 @@ def upsert_csv(name: str, fields: Dict[str, str], csv_path: str = SCANNED_CSV, o
     
     # Read all rows, preserving order
     if os.path.exists(csv_path):
-        with open(csv_path, newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            
-            for r in reader:
-                if r.get("name", "").strip().lower() == search_name:
-                    # Update matching row in place, preserving existing values when scraped value is missing
-                    found = True
-                    updated_row = {col: r.get(col, "") for col in ordered_fields}
-                    updated_row["name"] = name
-                    for k, v in fields.items():
-                        if k in updated_row:
-                            # Only update if we have a new value (not None, not empty string)
-                            # Preserve existing value if scraped value is missing
-                            if v is not None and v != "":
-                                updated_row[k] = v
-                            # If existing value is empty but we have None, keep empty (don't overwrite)
-                    rows.append(updated_row)
-                else:
-                    # Preserve other rows, normalized to ordered_fields structure
-                    normalized_row = {col: r.get(col, "") for col in ordered_fields}
-                    rows.append(normalized_row)
+        try:
+            with open(csv_path, newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                
+                for r in reader:
+                    try:
+                        if r.get("name", "").strip().lower() == search_name:
+                            # Update matching row in place, preserving existing values when scraped value is missing
+                            found = True
+                            updated_row = {col: r.get(col, "") for col in ordered_fields}
+                            updated_row["name"] = name
+                            for k, v in fields.items():
+                                if k in updated_row:
+                                    # Only update if we have a new value (not None, not empty string)
+                                    # Preserve existing value if scraped value is missing
+                                    if v is not None and v != "":
+                                        updated_row[k] = v
+                                    # If existing value is empty but we have None, keep empty (don't overwrite)
+                            rows.append(updated_row)
+                        else:
+                            # Preserve other rows, normalized to ordered_fields structure
+                            normalized_row = {col: r.get(col, "") for col in ordered_fields}
+                            rows.append(normalized_row)
+                    except Exception as e:
+                        log(f"Warning: Error processing row in CSV for {name}: {e}")
+                        continue
+        except Exception as e:
+            log(f"Error reading CSV file {csv_path}: {e}")
+            raise
 
     # If not found, append new row (shouldn't happen if init was run)
     if not found:
@@ -593,59 +763,227 @@ def upsert_csv(name: str, fields: Dict[str, str], csv_path: str = SCANNED_CSV, o
         rows.append(row)
 
     tmp = csv_path + ".tmp"
-    with open(tmp, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=ordered_fields)
-        writer.writeheader()
-        writer.writerows(rows)
-        f.flush()  # Ensure all data is written
-        os.fsync(f.fileno())  # Force write to disk
-    
-    # Atomic replace
-    os.replace(tmp, csv_path)
-    log(f"Updated CSV: {csv_path} (wrote {len(rows)} rows)")
+    row_count = len(rows)
+    try:
+        with open(tmp, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=ordered_fields)
+            writer.writeheader()
+            writer.writerows(rows)
+            f.flush()  # Ensure all data is written
+            os.fsync(f.fileno())  # Force write to disk
+        
+        # Clear rows from memory before atomic replace
+        del rows
+        
+        # Atomic replace
+        os.replace(tmp, csv_path)
+        log(f"Updated CSV: {csv_path} (wrote {row_count} rows)")
+    except Exception as e:
+        log(f"Error writing CSV file {csv_path}: {e}")
+        # Try to clean up temp file
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except Exception:
+            pass
+        raise
 
 
 def main():
-    colleges = read_colleges(INPUT_CSV)
-    start_idx = load_progress()
-    slug_cache = load_slug_cache()
+    """Main scraper loop with comprehensive error handling."""
+    try:
+        colleges = read_colleges(INPUT_CSV)
+    except Exception as e:
+        log(f"Fatal error reading colleges: {e}")
+        return
+    
+    try:
+        start_idx = load_progress()
+    except Exception as e:
+        log(f"Warning: Error loading progress, starting from 0: {e}")
+        start_idx = 0
+    
+    try:
+        slug_cache = load_slug_cache()
+    except Exception as e:
+        log(f"Warning: Error loading slug cache, starting with empty cache: {e}")
+        slug_cache = OrderedDict()
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-setuid-sandbox"]  # Required for Render/Linux
-        )
-        page = browser.new_page(
-            user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36",
-            viewport={"width": 1280, "height": 900},
-        )
-
-        idx = start_idx
-        while True:
-            college = colleges[idx % len(colleges)]
-            name = college.get("name", "").strip()
+    browser = None
+    context = None
+    page = None
+    
+    try:
+        with sync_playwright() as p:
             try:
-                url, actual_name = resolve_url(page, name, slug_cache)
-                if not url:
-                    log(f"Skip (no URL found): {name}")
-                    log_slug_miss(name)
-                else:
-                    data = scrape_one(page, url)
-                    # Use actual_name (may be swapped) to update the CSV
-                    # This ensures the name matches what's on College Board
-                    upsert_csv(actual_name, data, original_name=name)
-                    if actual_name != name:
-                        log(f"Scraped {name} -> {url} (name updated to: {actual_name})")
-                    else:
-                        log(f"Scraped {name} -> {url}")
-            except Exception as e:  # noqa: BLE001
-                log(f"Error scraping {name}: {e}")
+                browser = p.chromium.launch(
+                    headless=True,
+                    args=[
+                        "--no-sandbox",
+                        "--disable-setuid-sandbox",
+                        "--disable-dev-shm-usage",  # Reduce memory usage
+                        "--disable-gpu",  # Reduce memory usage
+                        "--disable-extensions",  # Reduce memory usage
+                        "--disable-images",  # Don't load images to save memory
+                        "--blink-settings=imagesEnabled=false",
+                    ]
+                )
+            except Exception as e:
+                log(f"Fatal error launching browser: {e}")
+                return
+            
+            try:
+                # Create browser context for better isolation and memory management
+                context = browser.new_context(
+                    user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36",
+                    viewport={"width": 1280, "height": 900},
+                    ignore_https_errors=True,
+                )
+                page = context.new_page()
+            except Exception as e:
+                log(f"Fatal error creating context/page: {e}")
+                try:
+                    browser.close()
+                except Exception:
+                    pass
+                return
 
-            idx += 1
-            save_progress(idx)
-            time.sleep(SLEEP_BETWEEN_COLLEGES)
+            idx = start_idx
+            page_use_count = 0
+            consecutive_errors = 0
+            max_consecutive_errors = 10  # Restart browser after too many consecutive errors
+            
+            try:
+                while True:
+                    try:
+                        college = colleges[idx % len(colleges)]
+                        name = college.get("name", "").strip()
+                        
+                        if not name:
+                            log(f"Warning: Empty name at index {idx}, skipping")
+                            idx += 1
+                            continue
+                        
+                        # Recycle page periodically to prevent memory leaks
+                        if page_use_count >= PAGE_RECYCLE_INTERVAL:
+                            log(f"Recycling page after {page_use_count} uses to prevent memory leaks...")
+                            try:
+                                page.close()
+                            except Exception:
+                                pass
+                            try:
+                                page = context.new_page()
+                            except Exception as e:
+                                log(f"Warning: Failed to create new page, trying to recreate context: {e}")
+                                try:
+                                    context.close()
+                                    context = browser.new_context(
+                                        user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36",
+                                        viewport={"width": 1280, "height": 900},
+                                        ignore_https_errors=True,
+                                    )
+                                    page = context.new_page()
+                                except Exception as e2:
+                                    log(f"Fatal error recreating context: {e2}")
+                                    break
+                            page_use_count = 0
+                            # Force garbage collection
+                            gc.collect()
+                        
+                        try:
+                            url, actual_name = resolve_url(page, name, slug_cache)
+                            if not url:
+                                log(f"Skip (no URL found): {name}")
+                                log_slug_miss(name)
+                                consecutive_errors = 0  # Reset error counter
+                            else:
+                                try:
+                                    data = scrape_one(page, url)
+                                    # Use actual_name (may be swapped) to update the CSV
+                                    # This ensures the name matches what's on College Board
+                                    upsert_csv(actual_name, data, original_name=name)
+                                    
+                                    # Clear data dict from memory
+                                    del data
+                                    
+                                    if actual_name != name:
+                                        log(f"Scraped {name} -> {url} (name updated to: {actual_name})")
+                                    else:
+                                        log(f"Scraped {name} -> {url}")
+                                    consecutive_errors = 0  # Reset error counter
+                                except (PlaywrightTimeoutError, PlaywrightError) as e:
+                                    log(f"Network error scraping {name}: {e}")
+                                    consecutive_errors += 1
+                                except Exception as e:
+                                    log(f"Error scraping {name}: {e}")
+                                    consecutive_errors += 1
+                        except (PlaywrightTimeoutError, PlaywrightError) as e:
+                            log(f"Network error resolving URL for {name}: {e}")
+                            consecutive_errors += 1
+                        except Exception as e:
+                            log(f"Error processing {name}: {e}")
+                            consecutive_errors += 1
 
-        browser.close()
+                        # If too many consecutive errors, restart browser/context
+                        if consecutive_errors >= max_consecutive_errors:
+                            log(f"Too many consecutive errors ({consecutive_errors}), restarting browser context...")
+                            try:
+                                page.close()
+                                context.close()
+                                context = browser.new_context(
+                                    user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36",
+                                    viewport={"width": 1280, "height": 900},
+                                    ignore_https_errors=True,
+                                )
+                                page = context.new_page()
+                                page_use_count = 0
+                                consecutive_errors = 0
+                                gc.collect()
+                                log("Browser context restarted successfully")
+                            except Exception as e:
+                                log(f"Fatal error restarting browser context: {e}")
+                                break
+
+                        page_use_count += 1
+                        idx += 1
+                        save_progress(idx)
+                        
+                        # Periodic maintenance: garbage collection and cache save
+                        if idx % 10 == 0:
+                            gc.collect()
+                        # Save cache periodically (every 20 colleges) to ensure persistence
+                        if idx % 20 == 0:
+                            save_slug_cache(slug_cache)
+                        
+                        time.sleep(SLEEP_BETWEEN_COLLEGES)
+                    except KeyboardInterrupt:
+                        log("Scraper interrupted by user")
+                        break
+                    except Exception as e:
+                        log(f"Unexpected error in main loop: {e}")
+                        consecutive_errors += 1
+                        idx += 1
+                        time.sleep(SLEEP_BETWEEN_COLLEGES)
+            finally:
+                # Cleanup
+                try:
+                    if page:
+                        page.close()
+                except Exception:
+                    pass
+                try:
+                    if context:
+                        context.close()
+                except Exception:
+                    pass
+                try:
+                    if browser:
+                        browser.close()
+                except Exception:
+                    pass
+    except Exception as e:
+        log(f"Fatal error in main scraper: {e}")
+        raise
 
 
 if __name__ == "__main__":

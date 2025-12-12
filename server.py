@@ -63,13 +63,20 @@ def check_and_init():
 
 
 def run_scraper():
-    """Run the scraper in a separate thread."""
+    """Run the scraper in a separate thread with error recovery."""
     log("Starting scraper main loop...")
-    try:
-        scraper_main()
-    except Exception as e:
-        log(f"Fatal error in scraper: {e}")
-        raise
+    while True:
+        try:
+            scraper_main()
+        except KeyboardInterrupt:
+            log("Scraper interrupted")
+            break
+        except Exception as e:
+            log(f"Fatal error in scraper: {e}")
+            log("Restarting scraper in 60 seconds...")
+            import time
+            time.sleep(60)  # Wait before restarting to avoid rapid crash loops
+            log("Restarting scraper...")
 
 
 def initialize_app():

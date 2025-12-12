@@ -59,32 +59,49 @@ def get_data():
         data = []
         column_order = None
         # Use explicit file opening with flush/sync to ensure we get latest data
-        with open(SCANNED_CSV, "r", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            # Preserve column order from CSV header
-            column_order = reader.fieldnames
-            for row in reader:
-                # Reorder row dictionary to match CSV column order
-                ordered_row = {col: row.get(col) for col in column_order}
-                data.append(ordered_row)
+        try:
+            with open(SCANNED_CSV, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                # Preserve column order from CSV header
+                column_order = reader.fieldnames
+                if not column_order:
+                    abort(500, description="CSV file has no headers")
+                
+                for row in reader:
+                    try:
+                        # Reorder row dictionary to match CSV column order
+                        ordered_row = {col: row.get(col) for col in column_order}
+                        data.append(ordered_row)
+                    except Exception as e:
+                        log(f"Warning: Error processing row in CSV: {e}")
+                        continue
+        except PermissionError:
+            abort(503, description="CSV file is locked, please try again")
+        except Exception as e:
+            log(f"Error reading {SCANNED_CSV}: {e}")
+            abort(500, description=f"Error reading data file: {str(e)}")
         
         log(f"API returning {len(data)} rows from {SCANNED_CSV}")
         
-        response_data = {
-            "success": True,
-            "count": len(data),
-            "columns": list(column_order),  # Include column order in response
-            "data": data
-        }
-        
-        # Use make_response to preserve key order in JSON
-        from flask import make_response
-        response = make_response(jsonify(response_data))
-        # Ensure JSON response preserves order (Python 3.7+ dicts are ordered)
-        return response
+        try:
+            response_data = {
+                "success": True,
+                "count": len(data),
+                "columns": list(column_order),  # Include column order in response
+                "data": data
+            }
+            
+            # Use make_response to preserve key order in JSON
+            from flask import make_response
+            response = make_response(jsonify(response_data))
+            # Ensure JSON response preserves order (Python 3.7+ dicts are ordered)
+            return response
+        except Exception as e:
+            log(f"Error creating response: {e}")
+            abort(500, description=f"Error formatting response: {str(e)}")
     except Exception as e:
-        log(f"Error reading {SCANNED_CSV}: {e}")
-        abort(500, description=f"Error reading data: {str(e)}")
+        log(f"Unexpected error in get_data endpoint: {e}")
+        abort(500, description=f"Internal server error: {str(e)}")
 
 
 @app.route("/health", methods=["GET"])
